@@ -37,13 +37,13 @@ Nothing else. The release exe is self-contained, so no .NET runtime is needed.
 
 ## Install
 
-1. **Download** `ClaudeUsageTray.exe` from the [latest release](https://github.com/mdradityatama/claude-meter/releases/latest). It is a single file of about 50 MB.
+1. **Download** `ClaudeMeter.exe` from the [latest release](https://github.com/mdradityatama/claude-meter/releases/latest). It is a single file of about 50 MB.
 
 2. **Put it somewhere permanent**, for example `%LOCALAPPDATA%\Programs\ClaudeMeter\`, and double-click it.
 
    The exe isn't code-signed, so the first time Windows may show **"Windows protected your PC"**. Click **More info → Run anyway**.
 
-3. **Make the icon visible.** Windows 11 hides new tray icons in the `^` overflow. Go to **Settings → Personalization → Taskbar → Other system tray icons** and turn on **ClaudeUsageTray**.
+3. **Make the icon visible.** Windows 11 hides new tray icons in the `^` overflow. Go to **Settings → Personalization → Taskbar → Other system tray icons** and turn on **Claude Meter**.
 
 4. *(Optional)* To start automatically at sign-in, click the icon and check **Start with Windows**.
 
@@ -54,14 +54,14 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (`
 ```powershell
 git clone https://github.com/mdradityatama/claude-meter.git
 cd claude-meter
-dotnet publish src/ClaudeUsageTray -c Release -o publish
+dotnet publish src/ClaudeMeter -c Release -o publish
 ```
 
-This produces the same single self-contained file: `publish\ClaudeUsageTray.exe`.
+This produces the same single self-contained file: `publish\ClaudeMeter.exe`.
 
 ### Uninstall
 
-Uncheck **Start with Windows**, choose **Exit**, then delete `ClaudeUsageTray.exe`.
+Uncheck **Start with Windows**, choose **Exit**, then delete `ClaudeMeter.exe`.
 
 ## Troubleshooting
 
@@ -83,8 +83,8 @@ Uncheck **Start with Windows**, choose **Exit**, then delete `ClaudeUsageTray.ex
 ## Development
 
 ```powershell
-dotnet test                              # unit tests (xUnit)
-dotnet run --project src/ClaudeUsageTray # run from source
+dotnet test                          # unit tests (xUnit)
+dotnet run --project src/ClaudeMeter # run from source
 ```
 
 To release, push a version tag. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the exe and publishes it as a GitHub Release:
@@ -95,9 +95,9 @@ git push origin v0.1.0
 ```
 
 ```
-src/ClaudeUsageTray/
+src/ClaudeMeter/
   Core/   parsing, credentials, HTTP client, refresh policy, display formatting (no UI, unit tested)
   UI/     tray icon, hover panel, menu, startup registration
-tests/ClaudeUsageTray.Tests/
+tests/ClaudeMeter.Tests/
 docs/SPEC.md   original specification
 ```
