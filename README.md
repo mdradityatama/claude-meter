@@ -61,7 +61,7 @@ This produces the same single self-contained file: `publish\ClaudeUsageTray.exe`
 
 ### Uninstall
 
-Uncheck **Start with Windows**, choose **Exit**, then delete the folder `%LOCALAPPDATA%\Programs\ClaudeMeter`.
+Uncheck **Start with Windows**, choose **Exit**, then delete `ClaudeUsageTray.exe`.
 
 ## Troubleshooting
 
