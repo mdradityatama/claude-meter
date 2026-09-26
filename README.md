@@ -32,43 +32,32 @@ Claude Meter puts that number on your taskbar, where it's always visible.
 
 - Windows 11 (x64)
 - [Claude Code](https://code.claude.com/docs), signed in with a **Claude subscription** (Pro or Max). An API-key login has no plan limits to show.
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
-- To build from source: the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+
+Nothing else. The release exe is self-contained, so no .NET runtime is needed.
 
 ## Install
 
-There are no prebuilt releases yet, so you build it once from source.
+1. **Download** `ClaudeUsageTray.exe` from the [latest release](https://github.com/mdradityatama/claude-meter/releases/latest). It is a single file of about 50 MB.
 
-1. **Install the .NET 10 SDK** (it includes the runtime):
+2. **Put it somewhere permanent**, for example `%LOCALAPPDATA%\Programs\ClaudeMeter\`, and double-click it.
 
-   ```powershell
-   winget install Microsoft.DotNet.SDK.10
-   ```
+   The exe isn't code-signed, so the first time Windows may show **"Windows protected your PC"**. Click **More info → Run anyway**.
 
-2. **Clone and publish:**
+3. **Make the icon visible.** Windows 11 hides new tray icons in the `^` overflow. Go to **Settings → Personalization → Taskbar → Other system tray icons** and turn on **ClaudeUsageTray**.
 
-   ```powershell
-   git clone https://github.com/mdradityatama/claude-meter.git
-   cd claude-meter
-   dotnet publish src/ClaudeUsageTray -c Release -o publish
-   ```
+4. *(Optional)* To start automatically at sign-in, click the icon and check **Start with Windows**.
 
-   This produces a single file, `publish\ClaudeUsageTray.exe` (about 200 KB).
+### Build from source
 
-3. **Put it somewhere permanent** and start it:
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (`winget install Microsoft.DotNet.SDK.10`).
 
-   ```powershell
-   $dir = "$env:LOCALAPPDATA\Programs\ClaudeMeter"
-   New-Item -ItemType Directory -Force $dir | Out-Null
-   Copy-Item publish\ClaudeUsageTray.exe $dir
-   & "$dir\ClaudeUsageTray.exe"
-   ```
+```powershell
+git clone https://github.com/mdradityatama/claude-meter.git
+cd claude-meter
+dotnet publish src/ClaudeUsageTray -c Release -o publish
+```
 
-4. **Make the icon visible.** Windows 11 hides new tray icons in the `^` overflow. Go to **Settings → Personalization → Taskbar → Other system tray icons** and turn on **ClaudeUsageTray**.
-
-5. *(Optional)* To start automatically at sign-in, click the icon and check **Start with Windows**.
-
-To run the exe on another PC, copy it over and install only the runtime there: `winget install Microsoft.DotNet.DesktopRuntime.10`.
+This produces the same single self-contained file: `publish\ClaudeUsageTray.exe`.
 
 ### Uninstall
 
@@ -96,6 +85,13 @@ Uncheck **Start with Windows**, choose **Exit**, then delete the folder `%LOCALA
 ```powershell
 dotnet test                              # unit tests (xUnit)
 dotnet run --project src/ClaudeUsageTray # run from source
+```
+
+To release, push a version tag. The [Release workflow](.github/workflows/release.yml) runs the tests, builds the exe and publishes it as a GitHub Release:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ```
