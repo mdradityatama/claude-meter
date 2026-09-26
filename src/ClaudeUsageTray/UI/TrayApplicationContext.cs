@@ -5,10 +5,12 @@ using Microsoft.Win32;
 
 namespace ClaudeUsageTray.UI;
 
-/// <summary>Owns the tray icon, its menu and the poll timer. No main window.</summary>
+/// <summary>Owns the tray icon, its menu, the hover panel and the poll timer. No main window.</summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private const string UsagePageUrl = "https://claude.ai/settings/usage";
+    private const int HoverShowDelayMs = 300;
+    private const int HoverHideDelayMs = 400;
 
     // NotifyIcon only opens its menu on right click; this is the same method it uses internally.
     private static readonly MethodInfo? ShowContextMenuMethod =
@@ -21,6 +23,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _startWithWindowsItem;
     private readonly List<ToolStripItem> _infoItems = [];
     private readonly System.Windows.Forms.Timer _timer = new();
+    private readonly UsagePanel _panel = new();
+    // Windows reports no "mouse left the tray icon" event, so hover is tracked by polling the cursor.
+    private readonly System.Windows.Forms.Timer _hoverTimer = new() { Interval = 100 };
+    private long _hoverStartedAt;
+    private long? _leftAt;
+    private Point _lastHoverPoint;
     private Icon? _icon;
 
     public TrayApplicationContext()
@@ -44,6 +52,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon = new NotifyIcon { ContextMenuStrip = _menu, Visible = true };
         _notifyIcon.MouseUp += OnNotifyIconMouseUp;
+        _notifyIcon.MouseMove += OnNotifyIconMouseMove;
+
+        _panel.RefreshRequested += OnRefreshClick;
+        _panel.UsagePageRequested += OnOpenUsagePageClick;
+        _hoverTimer.Tick += OnHoverTick;
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -86,11 +99,62 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Icon = _icon;
         previous?.Dispose();
 
-        _notifyIcon.Text = DisplayFormatter.Tooltip(state, TimeZoneInfo.Local, DateTimeOffset.Now);
+        if (_panel.Visible)
+            _panel.SetModel(CurrentPanelModel());
+    }
+
+    private PanelModel CurrentPanelModel() =>
+        DisplayFormatter.Panel(_service.State, TimeZoneInfo.Local, DateTimeOffset.Now);
+
+    private void OnNotifyIconMouseMove(object? sender, MouseEventArgs e)
+    {
+        _lastHoverPoint = Cursor.Position;
+        if (!_hoverTimer.Enabled)
+        {
+            _hoverStartedAt = Environment.TickCount64;
+            _hoverTimer.Start();
+        }
+    }
+
+    private void OnHoverTick(object? sender, EventArgs e)
+    {
+        var cursor = Cursor.Position;
+        var icon = TrayIconBounds.Get(_notifyIcon, _lastHoverPoint);
+        var overIcon = icon.Contains(cursor);
+        var now = Environment.TickCount64;
+
+        if (!_panel.Visible)
+        {
+            if (!overIcon || _menu.Visible)
+                _hoverTimer.Stop();
+            else if (now - _hoverStartedAt >= HoverShowDelayMs)
+                _panel.ShowAt(icon, CurrentPanelModel());
+            return;
+        }
+
+        // Stay open while the cursor is on the icon or the panel (so its links can be clicked).
+        if (overIcon || _panel.Bounds.Contains(cursor))
+        {
+            _leftAt = null;
+            return;
+        }
+
+        _leftAt ??= now;
+        if (now - _leftAt >= HoverHideDelayMs)
+            HidePanel();
+    }
+
+    private void HidePanel()
+    {
+        _hoverTimer.Stop();
+        _leftAt = null;
+        _panel.Hide();
     }
 
     private void OnMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        HidePanel();
+
         foreach (var item in _infoItems)
         {
             _menu.Items.Remove(item);
@@ -133,6 +197,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _timer.Dispose();
+            _hoverTimer.Dispose();
+            _panel.Dispose();
             _notifyIcon.Dispose();
             _menu.Dispose();
             _icon?.Dispose();

@@ -13,10 +13,14 @@ public enum UsageLevel
 
 internal sealed record IconFace(string Text, UsageLevel Level);
 
-/// <summary>Turns a <see cref="UsageState"/> into the icon face, tooltip and menu info lines.</summary>
+/// <param name="Fraction">Progress bar fill, 0–1.</param>
+internal sealed record PanelRow(string Label, string Percent, string Resets, double Fraction, UsageLevel Level);
+
+internal sealed record PanelModel(PanelRow FiveHour, PanelRow SevenDay, string Status);
+
+/// <summary>Turns a <see cref="UsageState"/> into the icon face, hover panel and menu info lines.</summary>
 internal static class DisplayFormatter
 {
-    public const int MaxTooltipLength = 127;
     private const string Unknown = "—";
 
     /// <summary>Based on the displayed (rounded) percentage so number and color always agree.</summary>
@@ -39,26 +43,29 @@ internal static class DisplayFormatter
             : new IconFace(percent.ToString(CultureInfo.InvariantCulture), LevelFor(percent));
     }
 
-    public static string Tooltip(UsageState state, TimeZoneInfo zone, DateTimeOffset now)
+    public static PanelModel Panel(UsageState state, TimeZoneInfo zone, DateTimeOffset now)
     {
-        string text;
-        if (state.Snapshot is not { } snapshot)
+        var status = state.Status switch
         {
-            text = "Claude usage: " + StatusText(state);
-        }
-        else
-        {
-            text = $"5h {Percent(snapshot.FiveHour)} · reset {FormatTime(snapshot.FiveHour?.ResetsAt, zone, now)}"
-                + $" | 7d {Percent(snapshot.SevenDay)} · reset {FormatTime(snapshot.SevenDay?.ResetsAt, zone, now)}";
-            text += state.Status switch
-            {
-                UsageStatus.Ok => "",
-                UsageStatus.Error => $" | stale {FormatTime(state.LastUpdated, zone, now)}",
-                _ => " | " + StatusText(state),
-            };
-        }
+            UsageStatus.Ok => $"Updated {FormatTime(state.LastUpdated, zone, now)}",
+            UsageStatus.Error when state.IsStale => $"Stale since {FormatTime(state.LastUpdated, zone, now)} ({StatusText(state)})",
+            _ => Capitalize(StatusText(state)),
+        };
 
-        return text.Length <= MaxTooltipLength ? text : text[..MaxTooltipLength];
+        return new PanelModel(
+            Row("5-hour", state.Snapshot?.FiveHour, zone, now),
+            Row("7-day", state.Snapshot?.SevenDay, zone, now),
+            status);
+    }
+
+    private static PanelRow Row(string label, UsageWindow? window, TimeZoneInfo zone, DateTimeOffset now)
+    {
+        var resets = "Resets " + FormatTime(window?.ResetsAt, zone, now);
+        if (Round(window?.Utilization) is not int percent)
+            return new PanelRow(label, Unknown, resets, 0, UsageLevel.Unknown);
+
+        var level = percent >= 100 ? UsageLevel.Red : LevelFor(percent);
+        return new PanelRow(label, $"{percent}%", resets, Math.Clamp(window!.Utilization!.Value / 100, 0, 1), level);
     }
 
     public static IReadOnlyList<string> MenuLines(UsageState state, TimeZoneInfo zone, DateTimeOffset now)
@@ -77,8 +84,7 @@ internal static class DisplayFormatter
         }
         else
         {
-            var status = StatusText(state);
-            lines.Add(char.ToUpperInvariant(status[0]) + status[1..]);
+            lines.Add(Capitalize(StatusText(state)));
             if (state.IsStale)
                 lines.Add($"Stale, last updated {FormatTime(state.LastUpdated, zone, now)}");
         }
@@ -104,6 +110,8 @@ internal static class DisplayFormatter
         UsageStatus.NoCredentials => "no credentials, sign in to Claude Code",
         _ => state.Error ?? "error",
     };
+
+    private static string Capitalize(string text) => char.ToUpperInvariant(text[0]) + text[1..];
 
     private static string Percent(UsageWindow? window) =>
         Round(window?.Utilization) is int percent ? $"{percent}%" : Unknown;

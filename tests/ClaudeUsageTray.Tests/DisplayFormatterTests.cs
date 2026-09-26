@@ -70,43 +70,54 @@ public class DisplayFormatterTests
     }
 
     [Fact]
-    public void Tooltip_matches_spec_format()
+    public void Panel_rows_for_ok_state()
     {
         var state = new UsageState(
             UsageStatus.Ok,
             new UsageSnapshot(
                 new UsageWindow(42, new DateTimeOffset(2026, 9, 29, 7, 30, 0, TimeSpan.Zero)),
-                new UsageWindow(18.2, new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero))),
+                new UsageWindow(81.6, new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero))),
             Now,
             null);
 
-        Assert.Equal("5h 42% · reset 14:30 | 7d 18% · reset Tue 07:00", DisplayFormatter.Tooltip(state, Local, Now));
+        var panel = DisplayFormatter.Panel(state, Local, Now);
+
+        Assert.Equal(new PanelRow("5-hour", "42%", "Resets 14:30", 0.42, UsageLevel.Green), panel.FiveHour);
+        Assert.Equal(new PanelRow("7-day", "82%", "Resets Tue 07:00", 0.816, UsageLevel.Red), panel.SevenDay);
+        Assert.Equal("Updated 09:00", panel.Status);
     }
 
     [Fact]
-    public void Tooltip_shows_dash_for_missing_values_and_stale_marker()
+    public void Panel_rows_show_dash_and_empty_bar_when_unknown()
     {
-        var state = new UsageState(UsageStatus.Error, new UsageSnapshot(new UsageWindow(null, null), null), Now.AddMinutes(-30), "network error");
+        var state = new UsageState(UsageStatus.Ok, new UsageSnapshot(new UsageWindow(null, null), null), Now, null);
 
-        Assert.Equal("5h — · reset — | 7d — · reset — | stale 08:30", DisplayFormatter.Tooltip(state, Local, Now));
+        var panel = DisplayFormatter.Panel(state, Local, Now);
+
+        Assert.Equal(new PanelRow("5-hour", "—", "Resets —", 0, UsageLevel.Unknown), panel.FiveHour);
+        Assert.Equal(new PanelRow("7-day", "—", "Resets —", 0, UsageLevel.Unknown), panel.SevenDay);
+    }
+
+    [Fact]
+    public void Panel_bar_is_clamped_to_full()
+    {
+        var state = new UsageState(UsageStatus.Ok, new UsageSnapshot(new UsageWindow(130, null), null), Now, null);
+
+        Assert.Equal(new PanelRow("5-hour", "130%", "Resets —", 1, UsageLevel.Red), DisplayFormatter.Panel(state, Local, Now).FiveHour);
     }
 
     [Theory]
-    [InlineData(UsageStatus.Loading, null, "Claude usage: loading…")]
-    [InlineData(UsageStatus.TokenExpired, "token expired", "Claude usage: token expired, open Claude Code")]
-    [InlineData(UsageStatus.NoCredentials, "no credentials", "Claude usage: no credentials, sign in to Claude Code")]
-    [InlineData(UsageStatus.Error, "network error", "Claude usage: network error")]
-    public void Tooltip_without_data_shows_status(UsageStatus status, string? error, string expected)
+    [InlineData(UsageStatus.Loading, false, null, "Loading…")]
+    [InlineData(UsageStatus.TokenExpired, true, "token expired", "Token expired, open Claude Code")]
+    [InlineData(UsageStatus.NoCredentials, false, "no credentials", "No credentials, sign in to Claude Code")]
+    [InlineData(UsageStatus.Error, false, "network error", "Network error")]
+    [InlineData(UsageStatus.Error, true, "network error", "Stale since 08:30 (network error)")]
+    public void Panel_status_line(UsageStatus status, bool hasData, string? error, string expected)
     {
-        Assert.Equal(expected, DisplayFormatter.Tooltip(new UsageState(status, null, null, error), Local, Now));
-    }
+        var snapshot = hasData ? new UsageSnapshot(null, null) : null;
+        var state = new UsageState(status, snapshot, hasData ? Now.AddMinutes(-30) : null, error);
 
-    [Fact]
-    public void Tooltip_never_exceeds_127_chars()
-    {
-        var state = new UsageState(UsageStatus.Error, null, null, new string('x', 300));
-
-        Assert.Equal(127, DisplayFormatter.Tooltip(state, Local, Now).Length);
+        Assert.Equal(expected, DisplayFormatter.Panel(state, Local, Now).Status);
     }
 
     [Fact]
