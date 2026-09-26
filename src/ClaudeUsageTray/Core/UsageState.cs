@@ -1,6 +1,6 @@
 namespace ClaudeUsageTray.Core;
 
-internal enum UsageStatus
+public enum UsageStatus
 {
     Loading,
     Ok,
