@@ -238,6 +238,51 @@ public class AccountSwitcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Unreadable_login_file_fails_cleanly()
+    {
+        var (t, liveA, _) = Arrange();
+        using (new FileStream(_home.Paths.Credentials, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Assert.Equal(new SwitchResult.Failed(AccountSwitcher.Changing), await _switcher.SwitchAsync(t.Key, null, default));
+
+        Assert.Equal(liveA, _home.LiveCredentials);
+        Assert.Empty(_home.Locks.Log);
+    }
+
+    [Fact]
+    public async Task Unsaved_snapshot_of_the_live_login_is_saved_before_the_switch_or_nothing_changes()
+    {
+        var (t, liveA, configBefore) = Arrange();
+        // Auto-save captured A's rotated token in memory, but the save failed.
+        _home.Store.Upsert(_home.Store.Find(A)!.WithLiveLogin(LiveLogin.From(new LiveFiles(liveA, configBefore))!));
+        File.Delete(_home.Paths.Store);
+        Directory.CreateDirectory(_home.Paths.Store);
+        Assert.False(_home.Store.TrySave());
+
+        var result = await _switcher.SwitchAsync(t.Key, null, default);
+
+        Assert.IsType<SwitchResult.Failed>(result);
+        Assert.Equal(liveA, _home.LiveCredentials);
+        Assert.Equal(configBefore, _home.LiveConfig);
+    }
+
+    [Fact]
+    public async Task Failed_undo_names_the_target_whose_switch_repairs_the_files()
+    {
+        var (t, _, _) = Arrange();
+        _home.Locks.AfterCreate = path =>
+        {
+            if (path != _home.Paths.GlobalConfigLock)
+                return;
+            File.SetAttributes(_home.Paths.GlobalConfig, FileAttributes.ReadOnly);
+            File.SetAttributes(_home.Paths.Credentials, FileAttributes.ReadOnly);
+        };
+
+        var result = Assert.IsType<SwitchResult.Failed>(await _switcher.SwitchAsync(t.Key, null, default));
+
+        Assert.Contains("Switch to t@example.com again", result.Message);
+    }
+
+    [Fact]
     public async Task Progress_reports_lock_wait_then_writing()
     {
         var (t, _, _) = Arrange();

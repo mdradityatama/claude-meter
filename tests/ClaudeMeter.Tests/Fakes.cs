@@ -90,8 +90,13 @@ internal sealed class FakeLockFileSystem(FakeTimeProvider clock) : ILockFileSyst
 
     public bool Exists(string path) => _dirs.ContainsKey(path);
 
+    /// <summary>When it returns true for a path, creating that lock throws an IOException.</summary>
+    public Func<string, bool>? FailCreate { get; set; }
+
     public bool TryCreateDirectory(string path)
     {
+        if (FailCreate?.Invoke(path) == true)
+            throw new IOException("Simulated lock failure.");
         if (_dirs.ContainsKey(path))
             return false;
         _dirs[path] = clock.Now;

@@ -279,6 +279,20 @@ public class AccountsRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task No_refresh_while_claude_codes_files_disagree_within_one_organization()
+    {
+        _home.Save("acc-a", "org-x", "a@example.com", ClaudeJson.Credentials("a-access", "a-refresh", Start.AddHours(8), "org-x"), Start.AddDays(-2));
+        _home.Save("acc-t", "org-x", "t@example.com", ClaudeJson.Credentials("t-access-1", "t-refresh-1", Start.AddMinutes(2), "org-x"), Start.AddDays(-1));
+        // Claude Code holds T (refreshed since), but a stale oauthAccount still says A.
+        _home.WriteLive(ClaudeJson.Credentials("t-access-9", "t-refresh-9", Start.AddHours(8), "org-x"), ClaudeJson.GlobalConfig("acc-a", "org-x", "a@example.com"));
+        _profiles.Result = new ProfileResult.Found("acc-t", "org-x");
+
+        await Runtime().StartAsync(StoreLoadResult.Loaded);
+
+        Assert.Empty(_tokens.RefreshTokensSeen);
+    }
+
+    [Fact]
     public async Task Unreadable_store_toasts_on_start()
     {
         SaveA();

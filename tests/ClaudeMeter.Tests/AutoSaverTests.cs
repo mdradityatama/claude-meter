@@ -182,6 +182,28 @@ public class AutoSaverTests : IDisposable
     }
 
     [Fact]
+    public async Task Unreadable_file_is_reported_busy_instead_of_throwing()
+    {
+        _home.WriteLive(CredentialsA("r-1"), ConfigA());
+        using var exclusive = new FileStream(_home.Paths.GlobalConfig, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        Assert.Equal(new AutoSaveResult.Busy(), await _saver.RunAsync(default));
+        Assert.Empty(_home.Store.Accounts);
+    }
+
+    [Fact]
+    public async Task Lock_file_system_error_is_reported_busy_and_releases_locks()
+    {
+        _home.WriteLive(CredentialsA("r-1"), ConfigA());
+        _profiles.Result = new ProfileResult.Found("acc-a", "org-a");
+        _home.Locks.FailCreate = path => path == _home.Paths.StorageWriteLock;
+
+        Assert.Equal(new AutoSaveResult.Busy(), await _saver.RunAsync(default));
+        Assert.Equal(0, _home.Locks.HeldCount);
+        Assert.Empty(_home.Store.Accounts);
+    }
+
+    [Fact]
     public async Task No_login_writes_nothing()
     {
         Assert.Equal(new AutoSaveResult.NoLogin(), await _saver.RunAsync(default));

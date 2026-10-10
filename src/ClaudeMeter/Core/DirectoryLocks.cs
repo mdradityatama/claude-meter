@@ -81,11 +81,20 @@ internal sealed class DirectoryLocks(ILockFileSystem fs, TimeProvider clock, Fun
         while (true)
         {
             var held = new List<HeldLock>();
-            foreach (var spec in specs)
+            try
             {
-                if (TryAcquire(spec) is not { } one)
-                    break;
-                held.Add(one);
+                foreach (var spec in specs)
+                {
+                    if (TryAcquire(spec) is not { } one)
+                        break;
+                    held.Add(one);
+                }
+            }
+            catch
+            {
+                // A lock left held would never go stale (it is touched) and would block Claude Code.
+                new HeldLocks(held).Dispose();
+                throw;
             }
 
             if (held.Count == specs.Count)

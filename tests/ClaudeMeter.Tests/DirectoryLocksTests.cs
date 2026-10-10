@@ -89,6 +89,17 @@ public class DirectoryLocksTests
     }
 
     [Fact]
+    public async Task Failure_on_a_later_lock_releases_the_earlier_ones()
+    {
+        _fs.FailCreate = path => path == B.Path;
+
+        await Assert.ThrowsAsync<IOException>(() => _locks.AcquireAsync([A, B], default));
+
+        Assert.False(_fs.Exists(A.Path));
+        Assert.Equal(0, _fs.HeldCount);
+    }
+
+    [Fact]
     public async Task Busy_second_lock_releases_the_first_and_retries()
     {
         _fs.AddForeign(B.Path, Start);

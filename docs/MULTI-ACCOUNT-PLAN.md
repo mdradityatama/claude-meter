@@ -22,9 +22,9 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 | 1. Core | done | b6dc10c |
 | 2. Accounts runtime | done | 3e11572 |
 | 3. UI | done (manual tray check pending) | bf9b256 |
-| 4. README and SPEC | done | (hash in the next commit) |
+| 4. README and SPEC | done | 81ecb70 |
 
-**Next step:** Final whole-branch review, then the user's manual tray check (hover, pin, switch with a second account). Open spike items: refreshTokenExpiresAt after Claude Code's next refresh; cached oauthAccount write-back after a switch.
+**Next step:** User's manual tray check (hover, pin, switch with a second account), then merge `multi-account` into master. Open spike items: refreshTokenExpiresAt after Claude Code's next refresh; cached oauthAccount write-back after a switch.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -59,6 +59,16 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 - 2026-10-11: Tasks 3.2–3.5: verified by screenshots of the real `MeterPanel` in a scratch harness (main, settings, inline confirm, 10-account overflow, empty; dark and light) and a 12 s smoke run of the app; full suite 241/241 (10 old panel/menu tests removed with the old panel). Hover, pin and a real switch need the user (only one account on this machine). Phase 3 committed.
 - 2026-10-11: Task 4.1: README rewritten (multiple accounts, key decisions, troubleshooting); docs/SPEC.md Security and 401 rule now defer to MULTI-ACCOUNT-SPEC.md. Ruling: claude-swap is credited by name without a link, because no verified URL is known — cost if wrong: none.
 - 2026-10-11: Task 4.1: refreshTokenExpiresAt unchanged at 2026-10-10 22:29Z, but Claude Code had not refreshed yet (expiresAt 2026-10-11 04:01Z); the item stays open. Phase 4 committed.
+- 2026-10-11: Final review (fresh reviewer, Opus): no Critical, 5 Important, 14 Minor; verdict 'with fixes'.
+- 2026-10-11: Final: fixed I1 (I/O errors escaping async handlers: crash dialog and polling stopped for good) — Unreadable_file_is_reported_busy_instead_of_throwing, Lock_file_system_error_is_reported_busy_and_releases_locks, Unreadable_login_file_fails_cleanly, Snapshot_without_a_splice_target_sends_nothing, Returned_scopes_are_skipped_when_the_snapshot_has_none RED→GREEN; tray reschedules polling in `finally` and wraps async handlers in a last-resort catch (UI, no unit test); suite 251/251.
+- 2026-10-11: Final: fixed I2 (a lock already taken leaked when a later lock threw, blocking Claude Code until exit) — Failure_on_a_later_lock_releases_the_earlier_ones RED→GREEN; suite 251/251.
+- 2026-10-11: Final: fixed I3 (byte-match skipped the 'A on disk before overwrite' save when an earlier save had failed) — Unsaved_snapshot_of_the_live_login_is_saved_before_the_switch_or_nothing_changes RED→GREEN; suite 251/251.
+- 2026-10-11: Final: fixed I4 (failed-undo message told the user to switch to A, which the panel shows as Active) — Failed_undo_names_the_target_whose_switch_repairs_the_files RED→GREEN; spec step 7 corrected; suite 251/251.
+- 2026-10-11: Final: fixed I5 (refresher could spend the token of the account Claude Code really holds when its files disagree) — Holder_is_unknown_when_claude_codes_files_disagree, No_refresh_while_claude_codes_files_disagree_within_one_organization RED→GREEN; spec Token refresh updated; suite 251/251.
+- 2026-10-11: Final: Ruling: I4 is fixed by naming T in the message, not by allowing a repair switch to the oauthAccount identity — that account shows as Active without a Switch button, while switching to T is reachable and tested — cost if wrong: the user switches twice to get back to A.
+- 2026-10-11: Final: Ruling: the tray's last-resort catch swallows exceptions silently (the app has no log) — cost if wrong: a future bug hides instead of showing a crash dialog.
+- 2026-10-11: Final: Ruling: M5 not fixed — `File.Replace` failing with ERROR_UNABLE_TO_MOVE_REPLACEMENT can leave `.credentials.json` deleted and the temp removed; it needs a seam to test and is very rare — cost if wrong: Claude Code is logged out and needs /login (the previous account's snapshot is still on disk).
+- 2026-10-11: Final: minor (deferred): M1 logged-out state shows no 'No credentials' row when saved accounts exist; M2 switch refreshes the target before the NoLogin/AlreadyActive checks; M3 no UI warning when the store can't be saved; M6 Exit during a switch can leave a half-finished state; M7 step 6 catch omits OperationCanceledException (latent, only None is passed); M8 record ToString prints tokens (nothing logs them); M9 AccountStore.Load IOException at startup crashes the app; M10 lock mtime race returns 1601 if the directory vanishes; M11 measure cache unbounded and relayout on every Changed; M12 several toasts in one poll replace each other; M13 byte-match auto-save path resets LoginState; M14 Review Focus 2 says a BOM is refused but it is kept (better).
 
 ## Context
 

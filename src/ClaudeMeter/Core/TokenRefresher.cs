@@ -7,15 +7,19 @@ internal sealed record ClaudeHolder(AccountKey? ActiveKey, string? LiveRefreshTo
     public bool Holds(StoredAccount account) =>
         account.Key == ActiveKey || (LiveRefreshToken is not null && account.Credentials?.RefreshToken == LiveRefreshToken);
 
-    /// <returns>Null if the files can't be read; then nothing may be refreshed.</returns>
+    /// <returns>Null if the files can't be read or disagree about the organization; then nothing may be refreshed.</returns>
     public static ClaudeHolder? Read(ClaudePaths paths)
     {
         try
         {
             var files = LiveFiles.Read(paths);
-            return new ClaudeHolder(
-                files.GlobalConfig is { } config ? OAuthAccount.Parse(config)?.Key : null,
-                files.Credentials is { } credentials ? CredentialsInfo.Parse(credentials)?.RefreshToken : null);
+            var account = files.GlobalConfig is { } config ? OAuthAccount.Parse(config) : null;
+            var credentials = files.Credentials is { } bytes ? CredentialsInfo.Parse(bytes) : null;
+            // Credentials of one account under another's oauthAccount (a half-finished switch or a stale write-back):
+            // nobody can tell which saved account Claude Code really holds.
+            if (account is not null && credentials?.OrganizationUuid is { } org && org != account.Key.OrganizationUuid)
+                return null;
+            return new ClaudeHolder(account?.Key, credentials?.RefreshToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
         {
@@ -61,6 +65,9 @@ internal sealed class TokenRefresher(AccountStore store, IOAuthTokenClient clien
             return RefreshOutcome.Unavailable;
         if (readHolder() is not { } holder || holder.Holds(account))
             return RefreshOutcome.Unavailable;
+        // The server rotates the token on success, so every field to update must be spliceable first.
+        if (!HasSpliceTargets(account.CredentialsJson))
+            return RefreshOutcome.Unavailable;
 
         var policy = Backoff(key);
         if (!policy.TryBeginRequest(manual: false))
@@ -80,7 +87,7 @@ internal sealed class TokenRefresher(AccountStore store, IOAuthTokenClient clien
                 json = Splice(json, "expiresAt", JsonSplice.EncodeNumber((clock.GetUtcNow() + success.ExpiresIn).ToUnixTimeMilliseconds()));
                 if (success.RefreshToken is { } rotated)
                     json = Splice(json, "refreshToken", JsonSplice.EncodeString(rotated));
-                if (success.Scopes is { } scopes)
+                if (success.Scopes is { } scopes && JsonSplice.Find(json, "claudeAiOauth", "scopes") is not null)
                     json = Splice(json, "scopes", JsonSplice.EncodeStringArray(scopes));
                 store.Upsert(current with { CredentialsJson = json });
                 store.TrySave();   // if this fails, LastSaveFailed blocks further refreshes until a save succeeds
@@ -109,6 +116,18 @@ internal sealed class TokenRefresher(AccountStore store, IOAuthTokenClient clien
     }
 
     private static byte[] Splice(byte[] json, string field, byte[] value) => JsonSplice.Replace(json, value, "claudeAiOauth", field);
+
+    private static bool HasSpliceTargets(byte[] json)
+    {
+        try
+        {
+            return new[] { "accessToken", "expiresAt", "refreshToken" }.All(field => JsonSplice.Find(json, "claudeAiOauth", field) is not null);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
 
     private RefreshPolicy Backoff(AccountKey key) =>
         _backoff.TryGetValue(key, out var policy) ? policy : _backoff[key] = new RefreshPolicy(clock);

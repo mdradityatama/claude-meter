@@ -61,7 +61,7 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
         {
             before = LiveLogin.From(LiveFiles.Read(paths));
         }
-        catch (FormatException)
+        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
             return Fail(Changing);
         }
@@ -93,9 +93,11 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
                 if (decision.Verdict != CaptureVerdict.Accept)
                     return Fail(decision.Verdict == CaptureVerdict.Defer ? Unverified : Changing);
                 store.Upsert(store.Find(live.Account.Key)?.WithLiveLogin(live) ?? StoredAccount.Create(live, clock.GetUtcNow()));
-                if (!store.TrySave())
-                    return Fail("Couldn't save the current account, so nothing was changed.");
             }
+
+            // Byte-matched or just captured, the snapshot of the live login must be on disk, not only in memory.
+            if ((store.HasUnsavedChanges || store.LastSaveFailed) && !store.TrySave())
+                return Fail("Couldn't save the current account, so nothing was changed.");
 
             // 4–5.
             target = store.Find(targetKey)!;
@@ -117,7 +119,9 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
                 }
                 catch (Exception undo) when (undo is IOException or UnauthorizedAccessException)
                 {
-                    return Fail($"Couldn't finish the switch or undo it. Switch to {live.Account.Email} again from the panel.");
+                    // Credentials now hold the target while oauthAccount still names the previous account;
+                    // switching to the target again repairs that (its credentials byte-match the snapshot).
+                    return Fail($"Couldn't finish the switch or undo it. Switch to {target.Email} again from the panel.");
                 }
 
                 return Fail(ex is LockTimeoutException ? Busy : "Couldn't update Claude Code's settings file. Nothing was changed.");

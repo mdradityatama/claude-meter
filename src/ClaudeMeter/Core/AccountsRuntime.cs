@@ -23,6 +23,7 @@ internal sealed class AccountsRuntime
     private OAuthAccount? _active;
     private CredentialsInfo? _activeCredentials;
     private string? _captureWarning;
+    private bool _captureRejected;
     private AccountKey? _switching;
     private SwitchStage? _switchStage;
     private AccountKey? _switchedTo;
@@ -34,9 +35,12 @@ internal sealed class AccountsRuntime
         _settings = settings;
         _usageClient = usage;
         _clock = clock;
-        _refresher = new TokenRefresher(store, tokens, () => ClaudeHolder.Read(paths), () => settings.KeepInactiveLive, clock);
-        _refresher.Disabled += (_, _) => Notify?.Invoke(this, Notifications.RefreshStopped);
         _autoSaver = new AutoSaver(paths, locks, store, profiles, clock);
+        // While captures are rejected (Claude Code's files disagree) nobody can say which account Claude Code
+        // holds, so no inactive account is refreshed: one of them might be the one it is really using.
+        _refresher = new TokenRefresher(
+            store, tokens, () => _captureRejected || _autoSaver.RequireProfile ? null : ClaudeHolder.Read(paths), () => settings.KeepInactiveLive, clock);
+        _refresher.Disabled += (_, _) => Notify?.Invoke(this, Notifications.RefreshStopped);
         _switcher = new AccountSwitcher(paths, locks, store, profiles, _refresher, clock);
     }
 
@@ -200,6 +204,8 @@ internal sealed class AccountsRuntime
             AutoSaveResult.Busy => _captureWarning,
             _ => null,
         };
+        if (result is not AutoSaveResult.Busy)
+            _captureRejected = result is AutoSaveResult.Rejected;
         if (result is AutoSaveResult.Inserted inserted)
             Notify?.Invoke(this, Notifications.Added(inserted.Email));
         ReadActive();

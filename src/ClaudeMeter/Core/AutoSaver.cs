@@ -33,6 +33,10 @@ internal sealed class AutoSaver(ClaudePaths paths, ClaudeLocks locks, AccountSto
         {
             return new AutoSaveResult.Rejected("unreadable global config");
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new AutoSaveResult.Busy();   // a file is open for writing right now
+        }
 
         if (live is null)
             return new AutoSaveResult.NoLogin();
@@ -67,7 +71,7 @@ internal sealed class AutoSaver(ClaudePaths paths, ClaudeLocks locks, AccountSto
             if (LiveLogin.From(LiveFiles.Read(paths)) is not { } again || !again.SameAs(live))
                 return new AutoSaveResult.Rejected("files changed during capture");
         }
-        catch (LockTimeoutException)
+        catch (Exception ex) when (ex is LockTimeoutException or IOException or UnauthorizedAccessException)
         {
             return new AutoSaveResult.Busy();
         }

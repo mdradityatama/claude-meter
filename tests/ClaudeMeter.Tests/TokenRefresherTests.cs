@@ -192,6 +192,37 @@ public class TokenRefresherTests : IDisposable
     }
 
     [Fact]
+    public async Task Snapshot_without_a_splice_target_sends_nothing()
+    {
+        var json = System.Text.Encoding.UTF8.GetString(_home.Store.Find(T)!.CredentialsJson);
+        var withoutExpiry = System.Text.RegularExpressions.Regex.Replace(json, "\"expiresAt\":\\d+,", "");
+        _home.Store.Upsert(_home.Store.Find(T)! with { CredentialsJson = System.Text.Encoding.UTF8.GetBytes(withoutExpiry) });
+
+        Assert.Equal(RefreshOutcome.Unavailable, await _refresher.EnsureFreshAsync(T, default));
+        Assert.Empty(_tokens.RefreshTokensSeen);
+    }
+
+    [Fact]
+    public async Task Returned_scopes_are_skipped_when_the_snapshot_has_none()
+    {
+        var json = System.Text.Encoding.UTF8.GetString(_home.Store.Find(T)!.CredentialsJson);
+        var withoutScopes = json.Replace("\"scopes\":[\"user:inference\",\"user:profile\"],", "");
+        _home.Store.Upsert(_home.Store.Find(T)! with { CredentialsJson = System.Text.Encoding.UTF8.GetBytes(withoutScopes) });
+        _tokens.Results.Enqueue(NewTokens(scopes: ["user:inference"]));
+
+        Assert.Equal(RefreshOutcome.Refreshed, await _refresher.EnsureFreshAsync(T, default));
+        Assert.Equal("t-access-2", _home.Store.Find(T)!.Credentials!.AccessToken);
+    }
+
+    [Fact]
+    public void Holder_is_unknown_when_claude_codes_files_disagree()
+    {
+        _home.WriteLive(ClaudeJson.Credentials("x", "t-refresh-9", Start, "org-t"), ClaudeJson.GlobalConfig("acc-a", "org-a", "a@example.com"));
+
+        Assert.Null(ClaudeHolder.Read(_home.Paths));
+    }
+
+    [Fact]
     public void Holder_reads_claude_codes_files()
     {
         _home.WriteLive(ClaudeJson.Credentials("x", "a-refresh", Start, "org-a"), ClaudeJson.GlobalConfig("acc-a", "org-a", "a@example.com"));

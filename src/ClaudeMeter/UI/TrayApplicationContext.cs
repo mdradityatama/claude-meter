@@ -55,7 +55,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateTray();
 
         _watcher = new ClaudeFilesWatcher(_paths);
-        _watcher.Changed += async (_, _) => await _runtime.OnClaudeFilesChangedAsync();
+        _watcher.Changed += async (_, _) => await RunSafelyAsync(_runtime.OnClaudeFilesChangedAsync);
 
         // First poll runs once the message loop is up.
         _timer.Tick += OnTimerTick;
@@ -66,18 +66,39 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private async void OnTimerTick(object? sender, EventArgs e)
     {
         _timer.Stop();
-        if (_started)
+        try
         {
-            await _runtime.PollAsync(manual: false, CancellationToken.None);
+            if (_started)
+            {
+                await RunSafelyAsync(() => _runtime.PollAsync(manual: false, CancellationToken.None));
+            }
+            else
+            {
+                _started = true;
+                await RunSafelyAsync(() => _runtime.StartAsync(_loaded));
+            }
         }
-        else
+        finally
         {
-            _started = true;
-            await _runtime.StartAsync(_loaded);
+            // Polling must never stop, whatever happened in this round.
+            UpdateTray();
+            ScheduleNextPoll();
         }
+    }
 
-        UpdateTray();
-        ScheduleNextPoll();
+    /// <summary>
+    /// Last resort for async event handlers: an exception there would show WinForms' crash dialog and leave the
+    /// tray frozen. Expected failures are handled where they happen; this only keeps the app alive.
+    /// </summary>
+    private static async Task RunSafelyAsync(Func<Task> work)
+    {
+        try
+        {
+            await work();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+        }
     }
 
     private void ScheduleNextPoll()
@@ -200,7 +221,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         switch (action)
         {
             case PanelAction.Refresh:
-                await _runtime.PollAsync(manual: true, CancellationToken.None);
+                await RunSafelyAsync(() => _runtime.PollAsync(manual: true, CancellationToken.None));
                 ScheduleNextPoll();
                 break;
             case PanelAction.TogglePin:
@@ -213,11 +234,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 Pin();
                 break;
             case PanelAction.Switch switchTo:
-                await _runtime.SwitchAsync(switchTo.Key);
+                await RunSafelyAsync(() => _runtime.SwitchAsync(switchTo.Key));
                 ScheduleNextPoll();
                 break;
             case PanelAction.Remove remove:
-                await _runtime.RemoveAsync(remove.Key);
+                await RunSafelyAsync(() => _runtime.RemoveAsync(remove.Key));
                 break;
             case PanelAction.ToggleKeepLive:
                 _runtime.SetKeepInactiveLive(!_runtime.KeepInactiveLive);
