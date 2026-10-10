@@ -19,12 +19,12 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 | Phase | Status | Commit |
 |---|---|---|
 | 0. Plan in repo | done | c0dad18 |
-| 1. Core | done | (hash in the next commit) |
-| 2. Accounts runtime | not started | |
+| 1. Core | done | b6dc10c |
+| 2. Accounts runtime | done | (hash in the next commit) |
 | 3. UI | not started | |
 | 4. README and SPEC | not started | |
 
-**Next step:** Task 2.1, Step 1.
+**Next step:** Task 3.1, Step 1 (acrylic prototype; decision gate — ask the user if acrylic fails).
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -43,6 +43,14 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 - 2026-10-11: Task 1.7: complete, full suite 169/169 (added Verified_unknown_active_account_is_saved_before_the_switch and Progress_reports_lock_wait_then_writing).
 - 2026-10-11: Task 1.8: Ruling: the plaintext check uses the account's email string, not `Select-String '@'`, because random ciphertext bytes can contain '@' — cost if wrong: none.
 - 2026-10-11: Task 1.8: live run verified: `accounts.dat` created as a DPAPI blob without email or token; no lock dirs or temp files left. Phase 1 committed.
+- 2026-10-11: Task 2.1: complete, full suite 177/177.
+- 2026-10-11: Task 2.2: complete, full suite 190/190 (added Holder_reads_claude_codes_files).
+- 2026-10-11: Task 2.3: complete, full suite 201/201.
+- 2026-10-11: Task 2.4: Ruling: settings-row test dates are relative to the test clock (1 Oct / 24 Oct) instead of the mockup's 13 Oct — cost if wrong: none, same rule.
+- 2026-10-11: Task 2.4: complete, full suite 231/231.
+- 2026-10-11: Task 2.5: complete, full suite 234/234.
+- 2026-10-11: Task 2.6: Ruling: `TokenRefresher` blocks on the new `AccountStore.LastSaveFailed` instead of `HasUnsavedChanges`; the plan's flag was also true for ordinary pending usage updates mid-poll and silently blocked every 401 retry (found by `Inactive_401_with_refresh_retries_once_with_the_new_token`; regression test `Pending_unsaved_changes_do_not_block_refresh`) — cost if wrong: none, matches the spec's 'until the save succeeds'.
+- 2026-10-11: Task 2.6: complete, full suite 251/251; live run: store reloads, LastKnownAt persisted, no lock dirs left. Phase 2 committed.
 
 ## Context
 
@@ -2135,16 +2143,16 @@ git commit -m "Save Claude Code logins as encrypted snapshots and add the switch
   - `TokenResponseParser.ParseSuccess(string) → TokenResult` and `TokenResponseParser.ParseError(string) → TokenResult`.
   - Test fake `FakeOAuthTokenClient` (`Results` queue, `RefreshTokensSeen`).
 
-- [ ] **Step 1: Write the failing tests** (`TokenResponseParserTests`):
+- [x] **Step 1: Write the failing tests** (`TokenResponseParserTests`):
   - `{"access_token":"a2","refresh_token":"r2","expires_in":28800,"scope":"user:inference user:profile"}` → `Success("a2", 8 h, "r2", ["user:inference","user:profile"])` (compare fields; `Scopes` with `Assert.Equal` on the list).
   - Without `refresh_token` and `scope` → `RefreshToken` and `Scopes` null.
   - `scope` given as a JSON array → same list.
   - Missing `access_token`, missing or non-positive `expires_in`, or not JSON → `Transient(null, "invalid response")`.
   - `ParseError`: `{"error":"invalid_grant"}` → `InvalidGrant`; `{"error":"invalid_client"}` → `InvalidClient`; `{"error":"invalid_request"}` and `not json` → `Transient(null, "HTTP 400")`.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 // AppInfo.cs
@@ -2299,7 +2307,7 @@ internal sealed class FakeOAuthTokenClient : IOAuthTokenClient
 }
 ```
 
-- [ ] **Step 4: Run, expect PASS.**
+- [x] **Step 4: Run, expect PASS.**
 
 ### Task 2.2: Token refresher for inactive accounts
 
@@ -2314,7 +2322,7 @@ internal sealed class FakeOAuthTokenClient : IOAuthTokenClient
   - `TokenRefresher(AccountStore, IOAuthTokenClient, Func<ClaudeHolder?> readHolder, Func<bool> keepLive, TimeProvider) : ITokenRefresher` with `Margin` (5 min), `CanRefresh`, `GloballyDisabled`, `event EventHandler? Disabled`, `NeedsRefresh(StoredAccount)`, `EnsureFreshAsync`, `ForceRefreshAsync(AccountKey, CancellationToken)`.
   - Not reentrant by design: callers serialize through `OperationGate` (Task 2.6).
 
-- [ ] **Step 1: Write the failing tests.** Fixture: `_home`; T stored with credentials expiring at `Start + 2 min` (`t-access-1`, `t-refresh-1`, `refreshTokenExpiresAt` day +20); `_holder = new ClaudeHolder(new AccountKey("acc-a","org-a"), "a-refresh")`; `_tokens = new FakeOAuthTokenClient()`; `_keepLive = true`; `_refresher = new TokenRefresher(_home.Store, _tokens, () => _holder, () => _keepLive, _home.Clock)`.
+- [x] **Step 1: Write the failing tests.** Fixture: `_home`; T stored with credentials expiring at `Start + 2 min` (`t-access-1`, `t-refresh-1`, `refreshTokenExpiresAt` day +20); `_holder = new ClaudeHolder(new AccountKey("acc-a","org-a"), "a-refresh")`; `_tokens = new FakeOAuthTokenClient()`; `_keepLive = true`; `_refresher = new TokenRefresher(_home.Store, _tokens, () => _holder, () => _keepLive, _home.Clock)`.
 
 ```csharp
 [Fact]
@@ -2346,9 +2354,9 @@ public async Task Refresh_splices_new_tokens_and_keeps_every_other_byte()
   - `Failed_save_blocks_further_refreshes`: make the store unwritable (directory at `Paths.Store` after loading); first refresh → `Refreshed` with the new token in memory and `HasUnsavedChanges`; advance 10 min; second (forced) → `Unavailable`, no request; restore writability, `TrySave()`, advance 10 min → a forced refresh sends again. (Advancing past `RefreshPolicy.PollInterval` keeps the policy from masking the save check.)
   - `Force_refresh_ignores_the_margin`: T expires in 6 h; `ForceRefreshAsync` → request sent.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2470,7 +2478,7 @@ internal sealed class TokenRefresher(AccountStore store, IOAuthTokenClient clien
 
 Note: `RefreshPolicy.TryBeginRequest(manual: false)` also limits refreshes to one per 10 minutes per account, which is far below the 8-hour token life.
 
-- [ ] **Step 4: Run, expect PASS.**
+- [x] **Step 4: Run, expect PASS.**
 
 ### Task 2.3: Per-account token source for UsageService
 
@@ -2489,9 +2497,9 @@ Note: `RefreshPolicy.TryBeginRequest(manual: false)` also limits refreshes to on
   - `OperationGate` with `EnterAsync(CancellationToken) → Task<IDisposable>`.
   - `AccountTokenSource(AccountKey key, Func<AccountKey?> activeKey, Func<string?> readLiveToken, AccountStore store, TokenRefresher refresher, OperationGate gate, TimeProvider clock) : IAccessTokenSource`.
 
-- [ ] **Step 1: Fake usage client responder.** In `FakeUsageClient` add `public Func<string, FetchResult>? Responder { get; set; }` and use it when set: `return Task.FromResult(Responder?.Invoke(accessToken) ?? Results.Dequeue());`.
+- [x] **Step 1: Fake usage client responder.** In `FakeUsageClient` add `public Func<string, FetchResult>? Responder { get; set; }` and use it when set: `return Task.FromResult(Responder?.Invoke(accessToken) ?? Results.Dequeue());`.
 
-- [ ] **Step 2: Write the failing tests.**
+- [x] **Step 2: Write the failing tests.**
   - `UsageServiceTests` additions (with a small `FakeTokenSource` in the test file: `Lookup`, `Renewed`, `RenewCalls`):
     - `Unauthorized_renews_once_and_retries_with_the_new_token`: first token `old` → `Unauthorized`; `Renewed = "new"` → `Success`. Expect `TokensSeen == ["old","new"]`, status `Ok`, one `RenewAsync` call.
     - `Unauthorized_without_renewal_is_token_expired`: `Renewed = null` → `TokenExpired`; one fetch.
@@ -2506,16 +2514,16 @@ Note: `RefreshPolicy.TryBeginRequest(manual: false)` also limits refreshes to on
     - `With_refresh_a_401_refreshes_once`: `RenewAsync` → forced refresh → `"t-access-2"`.
     - `Expired_login_is_not_live`: `LoginState.Expired` → `NotLive`; no token request.
 
-- [ ] **Step 3: Run, expect FAIL.**
+- [x] **Step 3: Run, expect FAIL.**
 
-- [ ] **Step 4: Change `UsageState.cs`** (add the enum member after `NoCredentials`):
+- [x] **Step 4: Change `UsageState.cs`** (add the enum member after `NoCredentials`):
 
 ```csharp
     /// <summary>Inactive account without a usable token; the snapshot is the last known usage.</summary>
     NotLive,
 ```
 
-- [ ] **Step 5: Change `UsageService.cs`**
+- [x] **Step 5: Change `UsageService.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2608,7 +2616,7 @@ internal sealed class UsageService(IUsageClient client, IAccessTokenSource token
 
 (`DelegateTokenSource.GetAsync` throws synchronously when `read` throws; the `await` inside the `try` still catches it, so `Unreadable_credentials_file_is_treated_as_transient_error` keeps passing.)
 
-- [ ] **Step 6: Implement `AccountTokenSource.cs`**
+- [x] **Step 6: Implement `AccountTokenSource.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2686,7 +2694,7 @@ internal sealed class AccountTokenSource(
 }
 ```
 
-- [ ] **Step 7: Run, expect PASS** (`UsageServiceTests` all, old and new; `AccountTokenSourceTests`).
+- [x] **Step 7: Run, expect PASS** (`UsageServiceTests` all, old and new; `AccountTokenSourceTests`).
 
 ### Task 2.4: Login expiry, row formatting, reset inference, toast copy
 
@@ -2705,7 +2713,7 @@ internal sealed class AccountTokenSource(
   - `enum RowAction { Active, Switch, Switching, LoginExpired }`; `record BarModel(string Label, string Percent, string Resets, double Fraction, UsageLevel Level, bool Inferred)`; `record AccountRowModel(AccountKey Key, string Email, string? Plan, bool IsActive, RowAction Action, BarModel FiveHour, BarModel SevenDay, string Status, Tone StatusTone, string Login, Tone LoginTone)`; `record SettingsRowModel(AccountKey Key, string Email, string Sub, Tone SubTone, bool IsActive)`.
   - `DisplayFormatter.AccountRow(AccountView, TimeZoneInfo, DateTimeOffset now) → AccountRowModel`, `SettingsRow(AccountView, TimeZoneInfo, DateTimeOffset) → SettingsRowModel`, `PlanBadge(string?) → string?`, `Age(TimeSpan) → string`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `LoginExpiryTests` (`now = Start`):
     - `Describe(now + 13.5 d)` → `("Login valid 13 days", Muted, false)`.
     - `now + 3 d + 1 min` → `"Login valid 3 days"`, Muted; `now + 3 d` → `"Login expires in 3 days"`, Caution (boundary: 3 days or less is caution).
@@ -2726,9 +2734,9 @@ internal sealed class AccountTokenSource(
     - `Settings_row_sub_line`: active Pro valid until 24 Oct → `"Pro · active · login valid until 24 Oct"` Muted; Max ≤ 3 days → `"Max · login expires 13 Oct"` Caution; expired → `"Pro · login expired"` Critical.
     - `Age_format`: 30 s → `"just now"`, 15 min → `"15 min ago"`, 2 h → `"2 h ago"`, 47 h → `"47 h ago"`, 3 d → `"3 days ago"`.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement `LoginExpiry.cs`**
+- [x] **Step 3: Implement `LoginExpiry.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2792,7 +2800,7 @@ internal static class LoginExpiry
 }
 ```
 
-- [ ] **Step 4: Implement `Notifications.cs`**
+- [x] **Step 4: Implement `Notifications.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2826,7 +2834,7 @@ internal static class Notifications
 
 (Task 1.8's inline "Added" toast text switches to `Notifications.Added` here.)
 
-- [ ] **Step 5: Add row formatting to `DisplayFormatter.cs`** (new records next to `PanelRow`; `Panel`/`MenuLines` stay until Phase 3):
+- [x] **Step 5: Add row formatting to `DisplayFormatter.cs`** (new records next to `PanelRow`; `Panel`/`MenuLines` stay until Phase 3):
 
 ```csharp
 internal sealed record AccountView(
@@ -2941,7 +2949,7 @@ internal sealed record SettingsRowModel(AccountKey Key, string Email, string Sub
     };
 ```
 
-- [ ] **Step 6: Run, expect PASS** (`LoginExpiryTests`, `AccountRowTests`, existing `DisplayFormatterTests`, `AccountSwitcherTests`).
+- [x] **Step 6: Run, expect PASS** (`LoginExpiryTests`, `AccountRowTests`, existing `DisplayFormatterTests`, `AccountSwitcherTests`).
 
 ### Task 2.5: App settings
 
@@ -2952,11 +2960,11 @@ internal sealed record SettingsRowModel(AccountKey Key, string Email, string Sub
 **Interfaces:**
 - Produces: `AppSettings` with `static Load(string path) → AppSettings`, `KeepInactiveLive` (default true), `SetKeepInactiveLive(bool) → bool` (false if the save failed; the value still applies for this session).
 
-- [ ] **Step 1: Write the failing tests:** missing file → `KeepInactiveLive` true; `not json` → true; `SetKeepInactiveLive(false)` then `Load` again → false; file content is `{"keepInactiveLive":false}`.
+- [x] **Step 1: Write the failing tests:** missing file → `KeepInactiveLive` true; `not json` → true; `SetKeepInactiveLive(false)` then `Load` again → false; file content is `{"keepInactiveLive":false}`.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Text.Json;
@@ -3010,7 +3018,7 @@ internal sealed class AppSettings
 }
 ```
 
-- [ ] **Step 4: Run, expect PASS.**
+- [x] **Step 4: Run, expect PASS.**
 
 ### Task 2.6: Accounts runtime, wiring, commit Phase 2
 
@@ -3028,7 +3036,7 @@ internal sealed class AppSettings
   - `UsageState ActiveUsage` (for the tray icon), `TimeSpan TimeUntilNextDue`, `bool KeepInactiveLive`.
   - `Task StartAsync(StoreLoadResult loaded)` (seed last known usage, toast on `SetAside`, first poll), `Task PollAsync(bool manual, CancellationToken)`, `Task OnClaudeFilesChangedAsync()`, `Task SwitchAsync(AccountKey)`, `Task RemoveAsync(AccountKey)`, `void SetKeepInactiveLive(bool)`.
 
-- [ ] **Step 1: Write the failing tests** (`ClaudeHome`; `FakeUsageClient` with a `Responder` keyed by token; `FakeProfileClient`; `FakeOAuthTokenClient`; A live and stored, T stored):
+- [x] **Step 1: Write the failing tests** (`ClaudeHome`; `FakeUsageClient` with a `Responder` keyed by token; `FakeProfileClient`; `FakeOAuthTokenClient`; A live and stored, T stored):
   - `First_poll_fetches_every_account_with_its_own_token`: `TokensSeen` contains A's live token and T's saved token, once each.
   - `Each_account_keeps_its_own_schedule`: T's token gets `RateLimited(45 min)`, A gets `Success`. Advance 10 min, poll → only A fetched; `TimeUntilNextDue` = 10 min afterwards (A) while T waits until minute 45.
   - `Manual_refresh_respects_each_accounts_floor`: poll, advance 5 min − 1 s, `PollAsync(manual: true)` → nothing sent; advance 1 s → both sent.
@@ -3045,9 +3053,9 @@ internal sealed class AppSettings
   - `Remove_deletes_only_the_snapshot`: `RemoveAsync(T)` → T gone from store and views; Claude Code files unchanged.
   - `Invalid_client_toasts_once`: T's refresh returns `InvalidClient` twice over two polls → one `RefreshStopped` toast.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -3321,15 +3329,15 @@ internal sealed class AccountsRuntime
 }
 ```
 
-- [ ] **Step 4: Wire into the tray.** `TrayApplicationContext` replaces `_service`, `_autoSaver`, `_autoSaving` and the Phase 1 `AutoSaveAsync` with one `_runtime`:
+- [x] **Step 4: Wire into the tray.** `TrayApplicationContext` replaces `_service`, `_autoSaver`, `_autoSaving` and the Phase 1 `AutoSaveAsync` with one `_runtime`:
   - Construction: `var loaded = _store.Load(); _runtime = new AccountsRuntime(_paths, _store, AppSettings.Load(_paths.Settings), _client, _profiles, _tokens = new OAuthTokenClient(), ClaudeLocks.ForSystem(_paths), TimeProvider.System);` with `_runtime.Changed += (_, _) => UpdateTray();` and `_runtime.Notify += (_, n) => _notifyIcon.ShowBalloonTip(5000, n.Title, n.Body, ToolTipIcon.None);`. Keep `loaded` in a field for the first tick.
   - First tick: `await _runtime.StartAsync(_loaded)`; later ticks `await _runtime.PollAsync(manual: false, CancellationToken.None)`. `OnRefreshClick`: `PollAsync(manual: true, ...)`. Watcher: `await _runtime.OnClaudeFilesChangedAsync()`.
   - `ScheduleNextPoll` uses `_runtime.TimeUntilNextDue`; `UpdateTray` and `CurrentPanelModel` use `_runtime.ActiveUsage`; `OnMenuOpening` uses `_runtime.ActiveUsage` for `MenuLines`.
   - Dispose `_tokens`.
 
-- [ ] **Step 5: Verify.** `dotnet build`; `dotnet test` (all green). Run the app: the icon and the old panel show the active account as before; after `/login` with a second account in Claude Code, a toast "Added <email>" appears; `accounts.dat` grows.
+- [x] **Step 5: Verify.** `dotnet build`; `dotnet test` (all green). Run the app: the icon and the old panel show the active account as before; after `/login` with a second account in Claude Code, a toast "Added <email>" appears; `accounts.dat` grows.
 
-- [ ] **Step 6: Commit Phase 2**
+- [x] **Step 6: Commit Phase 2**
 
 ```powershell
 git add docs/MULTI-ACCOUNT-PLAN.md src tests

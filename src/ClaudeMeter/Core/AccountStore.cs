@@ -65,6 +65,9 @@ internal sealed class AccountStore(string path, IDataProtector protector)
 
     public bool HasUnsavedChanges { get; private set; }
 
+    /// <summary>The last <see cref="TrySave"/> failed; the in-memory state is newer than the file.</summary>
+    public bool LastSaveFailed { get; private set; }
+
     public StoredAccount? Find(AccountKey key) => _accounts.Find(a => a.Key == key);
 
     public StoredAccount? FindByCredentials(ReadOnlySpan<byte> credentials)
@@ -119,10 +122,12 @@ internal sealed class AccountStore(string path, IDataProtector protector)
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             AtomicFile.Write(path, protector.Protect(JsonSerializer.SerializeToUtf8Bytes(new StoreFile(1, _accounts), Options)));
             HasUnsavedChanges = false;
+            LastSaveFailed = false;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
         {
+            LastSaveFailed = true;
             return false;
         }
     }

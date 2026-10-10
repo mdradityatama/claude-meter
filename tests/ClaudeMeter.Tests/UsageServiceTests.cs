@@ -209,6 +209,60 @@ public class UsageServiceTests
     }
 
     [Fact]
+    public async Task Unauthorized_renews_once_and_retries_with_the_new_token()
+    {
+        var tokens = new FakeTokenSource { Lookup = new TokenLookup.Found("old"), Renewed = "new" };
+        var service = new UsageService(_client, tokens, new RefreshPolicy(_clock));
+        _client.Responder = token => token == "old" ? new FetchResult.Unauthorized() : new FetchResult.Success(Snapshot);
+
+        var state = await service.RefreshAsync(manual: false);
+
+        Assert.Equal(["old", "new"], _client.TokensSeen);
+        Assert.Equal(UsageStatus.Ok, state.Status);
+        Assert.Equal(["old"], tokens.RenewCalls);
+    }
+
+    [Fact]
+    public async Task Unauthorized_without_renewal_is_token_expired()
+    {
+        var tokens = new FakeTokenSource { Lookup = new TokenLookup.Found("old") };
+        var service = new UsageService(_client, tokens, new RefreshPolicy(_clock));
+        _client.Results.Enqueue(new FetchResult.Unauthorized());
+
+        var state = await service.RefreshAsync(manual: false);
+
+        Assert.Equal(UsageStatus.TokenExpired, state.Status);
+        Assert.Single(_client.TokensSeen);
+    }
+
+    [Fact]
+    public async Task Not_live_sends_nothing_and_keeps_data()
+    {
+        var tokens = new FakeTokenSource { Lookup = new TokenLookup.Found("tok") };
+        var service = new UsageService(_client, tokens, new RefreshPolicy(_clock));
+        _client.Results.Enqueue(new FetchResult.Success(Snapshot));
+        await service.RefreshAsync(manual: false);
+
+        tokens.Lookup = new TokenLookup.NotLive();
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        var state = await service.RefreshAsync(manual: false);
+
+        Assert.Equal(UsageStatus.NotLive, state.Status);
+        Assert.Same(Snapshot, state.Snapshot);
+        Assert.Single(_client.TokensSeen);
+    }
+
+    [Fact]
+    public void Seed_shows_last_known_usage_until_the_first_fetch()
+    {
+        _service.Seed(Snapshot, Start.AddHours(-2));
+
+        Assert.Equal(UsageStatus.Loading, _service.State.Status);
+        Assert.Same(Snapshot, _service.State.Snapshot);
+        Assert.Equal(Start.AddHours(-2), _service.State.LastUpdated);
+    }
+
+    [Fact]
     public async Task Token_is_reread_on_every_poll()
     {
         _client.Results.Enqueue(new FetchResult.Unauthorized());
@@ -221,5 +275,20 @@ public class UsageServiceTests
 
         Assert.Equal(["tok", "refreshed-by-claude-code"], _client.TokensSeen);
         Assert.Equal(UsageStatus.Ok, state.Status);
+    }
+
+    private sealed class FakeTokenSource : IAccessTokenSource
+    {
+        public TokenLookup Lookup { get; set; } = new TokenLookup.NoCredentials();
+        public string? Renewed { get; set; }
+        public List<string> RenewCalls { get; } = [];
+
+        public Task<TokenLookup> GetAsync(CancellationToken cancellationToken) => Task.FromResult(Lookup);
+
+        public Task<string?> RenewAsync(string rejectedToken, CancellationToken cancellationToken)
+        {
+            RenewCalls.Add(rejectedToken);
+            return Task.FromResult(Renewed);
+        }
     }
 }

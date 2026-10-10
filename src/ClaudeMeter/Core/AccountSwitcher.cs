@@ -51,7 +51,7 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
         // 1. Outside locks: a usable target, and the network check of the live login.
         if (store.Find(targetKey) is not { } target)
             return Fail("This account is no longer saved.");
-        if (IsExpired(target))
+        if (LoginExpiry.IsExpired(target, clock.GetUtcNow()))
             return Fail(TargetExpired);
         if (await refresher.EnsureFreshAsync(targetKey, cancellationToken) == RefreshOutcome.LoginExpired)
             return Fail(TargetExpired);
@@ -162,7 +162,4 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
 
         static SwitchResult Fail(string message) => new SwitchResult.Failed(message);
     }
-
-    private bool IsExpired(StoredAccount account) =>
-        account.LoginState == LoginState.Expired || account.Credentials?.RefreshTokenExpiresAt <= clock.GetUtcNow();
 }

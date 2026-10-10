@@ -7,6 +7,8 @@ public enum UsageStatus
     Error,
     TokenExpired,
     NoCredentials,
+    /// <summary>Inactive account without a usable token; the snapshot is the last known usage.</summary>
+    NotLive,
 }
 
 /// <param name="Snapshot">Last successfully fetched data; kept across failures.</param>

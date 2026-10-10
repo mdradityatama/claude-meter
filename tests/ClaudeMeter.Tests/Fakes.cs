@@ -125,10 +125,13 @@ internal sealed class FakeUsageClient : IUsageClient
     public Queue<FetchResult> Results { get; } = new();
     public List<string> TokensSeen { get; } = [];
 
+    /// <summary>When set, answers by token instead of from <see cref="Results"/>.</summary>
+    public Func<string, FetchResult>? Responder { get; set; }
+
     public Task<FetchResult> FetchAsync(string accessToken, CancellationToken cancellationToken)
     {
         TokensSeen.Add(accessToken);
-        return Task.FromResult(Results.Dequeue());
+        return Task.FromResult(Responder?.Invoke(accessToken) ?? Results.Dequeue());
     }
 }
 
@@ -166,5 +169,17 @@ internal sealed class FakeTokenRefresher : ITokenRefresher
     {
         Calls.Add(key);
         return Task.FromResult(Outcome);
+    }
+}
+
+internal sealed class FakeOAuthTokenClient : IOAuthTokenClient
+{
+    public Queue<TokenResult> Results { get; } = new();
+    public List<string> RefreshTokensSeen { get; } = [];
+
+    public Task<TokenResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        RefreshTokensSeen.Add(refreshToken);
+        return Task.FromResult(Results.Dequeue());
     }
 }

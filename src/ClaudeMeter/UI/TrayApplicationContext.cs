@@ -19,9 +19,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();
     private readonly UsageClient _client = new();
     private readonly ProfileClient _profiles = new();
-    private readonly AccountStore _store;
-    private readonly AutoSaver _autoSaver;
-    private readonly UsageService _service;
+    private readonly OAuthTokenClient _tokens = new();
+    private readonly AccountsRuntime _runtime;
+    private readonly StoreLoadResult _loaded;
+    private bool _started;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu = new();
     private readonly ToolStripMenuItem _startWithWindowsItem;
@@ -35,18 +36,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private Point _lastHoverPoint;
     private Icon? _icon;
     private ClaudeFilesWatcher? _watcher;
-    private bool _autoSaving;
 
     public TrayApplicationContext()
     {
-        _store = new AccountStore(_paths.Store, new DpapiProtector());
-        var loaded = _store.Load();
-        _autoSaver = new AutoSaver(_paths, ClaudeLocks.ForSystem(_paths), _store, _profiles, TimeProvider.System);
-
-        _service = new UsageService(
-            _client,
-            () => LiveFiles.ReadAccessToken(_paths),
-            new RefreshPolicy(TimeProvider.System));
+        var store = new AccountStore(_paths.Store, new DpapiProtector());
+        _loaded = store.Load();
+        _runtime = new AccountsRuntime(
+            _paths, store, AppSettings.Load(_paths.Settings), _client, _profiles, _tokens, ClaudeLocks.ForSystem(_paths), TimeProvider.System);
 
         _startWithWindowsItem = new ToolStripMenuItem("Start with Windows", null, OnStartWithWindowsClick) { CheckOnClick = true };
         _menu.Items.AddRange(
@@ -70,12 +66,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
+        _runtime.Changed += (_, _) => UpdateTray();
+        _runtime.Notify += (_, toast) => _notifyIcon.ShowBalloonTip(5000, toast.Title, toast.Body, ToolTipIcon.None);
         UpdateTray();
-        if (loaded == StoreLoadResult.SetAside)
-            _notifyIcon.ShowBalloonTip(5000, "Saved accounts couldn't be read", "Claude Meter kept the old file and starts fresh. Accounts are saved again as you use them.", ToolTipIcon.None);
 
         _watcher = new ClaudeFilesWatcher(_paths);
-        _watcher.Changed += async (_, _) => await AutoSaveAsync();
+        _watcher.Changed += async (_, _) => await _runtime.OnClaudeFilesChangedAsync();
 
         // First poll runs once the message loop is up.
         _timer.Tick += OnTimerTick;
@@ -86,31 +82,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private async void OnTimerTick(object? sender, EventArgs e)
     {
         _timer.Stop();
-        await AutoSaveAsync();
-        await _service.RefreshAsync(manual: false);
+        if (_started)
+        {
+            await _runtime.PollAsync(manual: false, CancellationToken.None);
+        }
+        else
+        {
+            _started = true;
+            await _runtime.StartAsync(_loaded);
+        }
+
         UpdateTray();
         ScheduleNextPoll();
     }
 
-    private async Task AutoSaveAsync()
-    {
-        if (_autoSaving)
-            return;
-        _autoSaving = true;
-        try
-        {
-            if (await _autoSaver.RunAsync(CancellationToken.None) is AutoSaveResult.Inserted inserted)
-                _notifyIcon.ShowBalloonTip(5000, $"Added {inserted.Email}", "Claude Meter saved this login. Switch accounts from the tray panel.", ToolTipIcon.None);
-        }
-        finally
-        {
-            _autoSaving = false;
-        }
-    }
-
     private async void OnRefreshClick(object? sender, EventArgs e)
     {
-        await _service.RefreshAsync(manual: true);
+        await _runtime.PollAsync(manual: true, CancellationToken.None);
         UpdateTray();
         ScheduleNextPoll();
     }
@@ -118,13 +106,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void ScheduleNextPoll()
     {
         _timer.Stop();
-        _timer.Interval = (int)Math.Clamp(_service.TimeUntilNextPoll.TotalMilliseconds, 1000, int.MaxValue);
+        _timer.Interval = (int)Math.Clamp(_runtime.TimeUntilNextDue.TotalMilliseconds, 1000, int.MaxValue);
         _timer.Start();
     }
 
     private void UpdateTray()
     {
-        var state = _service.State;
+        var state = _runtime.ActiveUsage;
 
         var previous = _icon;
         _icon = TrayIconRenderer.Render(DisplayFormatter.Icon(state));
@@ -136,7 +124,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     private PanelModel CurrentPanelModel() =>
-        DisplayFormatter.Panel(_service.State, TimeZoneInfo.Local, DateTimeOffset.Now);
+        DisplayFormatter.Panel(_runtime.ActiveUsage, TimeZoneInfo.Local, DateTimeOffset.Now);
 
     private void OnNotifyIconMouseMove(object? sender, MouseEventArgs e)
     {
@@ -194,7 +182,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         _infoItems.Clear();
 
-        foreach (var line in DisplayFormatter.MenuLines(_service.State, TimeZoneInfo.Local, DateTimeOffset.Now))
+        foreach (var line in DisplayFormatter.MenuLines(_runtime.ActiveUsage, TimeZoneInfo.Local, DateTimeOffset.Now))
             _infoItems.Add(new ToolStripMenuItem(line) { Enabled = false });
 
         for (var i = 0; i < _infoItems.Count; i++)
@@ -237,6 +225,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _watcher?.Dispose();
             _client.Dispose();
             _profiles.Dispose();
+            _tokens.Dispose();
         }
 
         base.Dispose(disposing);

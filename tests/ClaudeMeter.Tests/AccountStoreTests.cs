@@ -108,6 +108,11 @@ public class AccountStoreTests : IDisposable
 
         Assert.False(_home.Store.TrySave());
         Assert.True(_home.Store.HasUnsavedChanges);
+        Assert.True(_home.Store.LastSaveFailed);
+
+        Directory.Delete(_home.Paths.Store);
+        Assert.True(_home.Store.TrySave());
+        Assert.False(_home.Store.LastSaveFailed);
     }
 
     [Fact]
