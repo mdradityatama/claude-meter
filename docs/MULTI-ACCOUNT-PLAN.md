@@ -23,8 +23,9 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 | 2. Accounts runtime | done | 3e11572 |
 | 3. UI | done (manual tray check pending) | bf9b256 |
 | 4. README and SPEC | done | 81ecb70 |
+| 5. Merge and release | done (v2.0.0) | 570f08d |
 
-**Next step:** User's manual tray check (hover, pin, switch with a second account), then merge `multi-account` into master. Open spike items: refreshTokenExpiresAt after Claude Code's next refresh; cached oauthAccount write-back after a switch.
+**Next step:** User's manual tray check on the v2.0.0 build (hover, pin, switch with a second account). Open spike items: refreshTokenExpiresAt after Claude Code's next refresh; cached oauthAccount write-back after a switch.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -69,6 +70,7 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 - 2026-10-11: Final: Ruling: the tray's last-resort catch swallows exceptions silently (the app has no log) — cost if wrong: a future bug hides instead of showing a crash dialog.
 - 2026-10-11: Final: Ruling: M5 not fixed — `File.Replace` failing with ERROR_UNABLE_TO_MOVE_REPLACEMENT can leave `.credentials.json` deleted and the temp removed; it needs a seam to test and is very rare — cost if wrong: Claude Code is logged out and needs /login (the previous account's snapshot is still on disk).
 - 2026-10-11: Final: minor (deferred): M1 logged-out state shows no 'No credentials' row when saved accounts exist; M2 switch refreshes the target before the NoLogin/AlreadyActive checks; M3 no UI warning when the store can't be saved; M6 Exit during a switch can leave a half-finished state; M7 step 6 catch omits OperationCanceledException (latent, only None is passed); M8 record ToString prints tokens (nothing logs them); M9 AccountStore.Load IOException at startup crashes the app; M10 lock mtime race returns 1601 if the directory vanishes; M11 measure cache unbounded and relayout on every Changed; M12 several toasts in one poll replace each other; M13 byte-match auto-save path resets LoginState; M14 Review Focus 2 says a BOM is refused but it is kept (better).
+- 2026-10-11: User chose to merge `multi-account` into master before the manual tray check and release it as v2.0.0; all other branches (`feat/tray-app`, `chore/rename-claude-meter`, `multi-account`) were already contained in master and were deleted locally and on origin. Suite 251/251 before the merge.
 
 ## Context
 
