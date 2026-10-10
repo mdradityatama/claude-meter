@@ -23,13 +23,12 @@ A tiny, always-running tray app (notification area, bottom-right of the taskbar)
 ## Behavior rules
 - Poll every 10 minutes. Manual "Refresh" must never cause more than one request per 5 minutes (return cached data otherwise).
 - On HTTP 429: honor `Retry-After` if present, otherwise exponential backoff capped at 30 minutes.
-- On HTTP 401: show a "token expired, open Claude Code" state. Do NOT implement any OAuth refresh flow; Claude Code owns the token. Re-read the credentials file on every poll so a token refreshed by Claude Code is picked up automatically.
+- On HTTP 401: show a "token expired, open Claude Code" state. Claude Code owns the active account's token, so the app never refreshes it. Re-read the credentials file on every poll so a token refreshed by Claude Code is picked up automatically. (Superseded for inactive accounts by `MULTI-ACCOUNT-SPEC.md`, which refreshes only accounts Claude Code is not using.)
 - Network errors: keep last known data, mark it stale with its timestamp.
 - Convert `resets_at` to local time for display.
 
 ## Security (non-negotiable)
-- Never log, persist, copy, or display the access token.
-- The token is only ever sent to `api.anthropic.com`.
+Superseded by the Security section of `MULTI-ACCOUNT-SPEC.md`: tokens are never logged or displayed, are persisted only as DPAPI-encrypted snapshots in `%LOCALAPPDATA%\ClaudeMeter\accounts.dat`, and are sent only to `api.anthropic.com` (usage, profile) and `platform.claude.com` (token refresh of inactive accounts), with redirects disabled.
 
 ## Tray UI
 - Icon: render the 5-hour utilization as a number on the icon. Color: green < 50, yellow 50–79, red ≥ 80. Show "!" on error and "—" when unknown.

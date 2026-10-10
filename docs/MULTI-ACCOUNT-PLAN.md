@@ -21,10 +21,10 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 | 0. Plan in repo | done | c0dad18 |
 | 1. Core | done | b6dc10c |
 | 2. Accounts runtime | done | 3e11572 |
-| 3. UI | done (manual tray check pending) | (hash in the next commit) |
-| 4. README and SPEC | not started | |
+| 3. UI | done (manual tray check pending) | bf9b256 |
+| 4. README and SPEC | done | (hash in the next commit) |
 
-**Next step:** Task 4.1, Step 1. Pending from Phase 3: user check of hover/pin/switch in the real tray (Task 3.5 Step 6).
+**Next step:** Final whole-branch review, then the user's manual tray check (hover, pin, switch with a second account). Open spike items: refreshTokenExpiresAt after Claude Code's next refresh; cached oauthAccount write-back after a switch.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -57,6 +57,8 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 - 2026-10-11: Tasks 3.2–3.5: Ruling: done as one change set (UI has no tests and the phase is one commit); `UsagePanel` was deleted in the same change instead of being kept compiling against a theme shim — cost if wrong: none.
 - 2026-10-11: Tasks 3.2–3.5: Ruling: `CS_DROPSHADOW` gives the flyout its shadow; the settings action is `PanelAction.SettingsOpened` (the tray pins on it) — cost if wrong: cosmetic.
 - 2026-10-11: Tasks 3.2–3.5: verified by screenshots of the real `MeterPanel` in a scratch harness (main, settings, inline confirm, 10-account overflow, empty; dark and light) and a 12 s smoke run of the app; full suite 241/241 (10 old panel/menu tests removed with the old panel). Hover, pin and a real switch need the user (only one account on this machine). Phase 3 committed.
+- 2026-10-11: Task 4.1: README rewritten (multiple accounts, key decisions, troubleshooting); docs/SPEC.md Security and 401 rule now defer to MULTI-ACCOUNT-SPEC.md. Ruling: claude-swap is credited by name without a link, because no verified URL is known — cost if wrong: none.
+- 2026-10-11: Task 4.1: refreshTokenExpiresAt unchanged at 2026-10-10 22:29Z, but Claude Code had not refreshed yet (expiresAt 2026-10-11 04:01Z); the item stays open. Phase 4 committed.
 
 ## Context
 
@@ -3477,11 +3479,11 @@ git commit -m "Replace the tray menu with a Fluent multi-account panel" -m "One 
 
 **Files:** Modify `README.md`, `docs/SPEC.md`, `docs/MULTI-ACCOUNT-SPEC.md`
 
-- [ ] **Step 1: README "Multiple accounts" section:** add an account by running `/login` in Claude Code with it (saved automatically); switch from the panel; reopen Claude Code after switching; never `/logout` an account you want to keep (it can revoke the saved login); run `/login` again when a login expires.
-- [ ] **Step 2: README key decisions:** why the app stores DPAPI-encrypted credential snapshots (and only in `accounts.dat`); why it refreshes tokens of inactive accounts only, its risks (unofficial endpoint, Claude Code's client id, a lost refresh response spends the token) and the "Keep inactive accounts live" switch; why it takes Claude Code's lock directories (credit claude-swap for documenting the protocol); why captures are verified against the profile endpoint; limitation: every login expires at `refreshTokenExpiresAt` and needs `/login` again. Update the existing "never refreshes the OAuth token" decision accordingly; update the features list (no context menu; pin; switch).
-- [ ] **Step 3: `docs/SPEC.md` Security:** replace "Never ... persist, copy ... the access token" and "Do NOT implement any OAuth refresh flow" with a pointer to `MULTI-ACCOUNT-SPEC.md` Security, so the two specs no longer contradict.
-- [ ] **Step 4: `docs/MULTI-ACCOUNT-SPEC.md`:** close the Open items with their results (profile schema, `refreshTokenExpiresAt` observation, acrylic outcome, cached `oauthAccount` write-back observation if seen).
-- [ ] **Step 5: Commit Phase 4**
+- [x] **Step 1: README "Multiple accounts" section:** add an account by running `/login` in Claude Code with it (saved automatically); switch from the panel; reopen Claude Code after switching; never `/logout` an account you want to keep (it can revoke the saved login); run `/login` again when a login expires.
+- [x] **Step 2: README key decisions:** why the app stores DPAPI-encrypted credential snapshots (and only in `accounts.dat`); why it refreshes tokens of inactive accounts only, its risks (unofficial endpoint, Claude Code's client id, a lost refresh response spends the token) and the "Keep inactive accounts live" switch; why it takes Claude Code's lock directories (credit claude-swap for documenting the protocol); why captures are verified against the profile endpoint; limitation: every login expires at `refreshTokenExpiresAt` and needs `/login` again. Update the existing "never refreshes the OAuth token" decision accordingly; update the features list (no context menu; pin; switch).
+- [x] **Step 3: `docs/SPEC.md` Security:** replace "Never ... persist, copy ... the access token" and "Do NOT implement any OAuth refresh flow" with a pointer to `MULTI-ACCOUNT-SPEC.md` Security, so the two specs no longer contradict.
+- [x] **Step 4: `docs/MULTI-ACCOUNT-SPEC.md`:** close the Open items with their results (profile schema, `refreshTokenExpiresAt` observation, acrylic outcome, cached `oauthAccount` write-back observation if seen).
+- [x] **Step 5: Commit Phase 4**
 
 ```powershell
 git add README.md docs
