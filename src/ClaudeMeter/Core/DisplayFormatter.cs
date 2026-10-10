@@ -13,11 +13,6 @@ public enum UsageLevel
 
 internal sealed record IconFace(string Text, UsageLevel Level);
 
-/// <param name="Fraction">Progress bar fill, 0–1.</param>
-internal sealed record PanelRow(string Label, string Percent, string Resets, double Fraction, UsageLevel Level);
-
-internal sealed record PanelModel(PanelRow FiveHour, PanelRow SevenDay, string Status);
-
 /// <summary>One account as the runtime sees it; formatted into rows by <see cref="DisplayFormatter"/>.</summary>
 internal sealed record AccountView(
     AccountKey Key, string Email, string? Plan, bool IsActive, bool IsSaved, UsageState Usage, LoginInfo Login,
@@ -40,7 +35,7 @@ internal sealed record AccountRowModel(
 
 internal sealed record SettingsRowModel(AccountKey Key, string Email, string Sub, Tone SubTone, bool IsActive);
 
-/// <summary>Turns a <see cref="UsageState"/> into the icon face, hover panel and menu info lines.</summary>
+/// <summary>Turns usage and account state into the tray icon face and the panel's row models.</summary>
 internal static class DisplayFormatter
 {
     private const string Unknown = "—";
@@ -63,55 +58,6 @@ internal static class DisplayFormatter
         return percent >= 100
             ? new IconFace("F", UsageLevel.Red)
             : new IconFace(percent.ToString(CultureInfo.InvariantCulture), LevelFor(percent));
-    }
-
-    public static PanelModel Panel(UsageState state, TimeZoneInfo zone, DateTimeOffset now)
-    {
-        var status = state.Status switch
-        {
-            UsageStatus.Ok => $"Updated {FormatTime(state.LastUpdated, zone, now)}",
-            UsageStatus.Error when state.IsStale => $"Stale since {FormatTime(state.LastUpdated, zone, now)} ({StatusText(state)})",
-            _ => Capitalize(StatusText(state)),
-        };
-
-        return new PanelModel(
-            Row("5-hour", state.Snapshot?.FiveHour, zone, now),
-            Row("7-day", state.Snapshot?.SevenDay, zone, now),
-            status);
-    }
-
-    private static PanelRow Row(string label, UsageWindow? window, TimeZoneInfo zone, DateTimeOffset now)
-    {
-        var resets = "Resets " + FormatTime(window?.ResetsAt, zone, now);
-        if (Round(window?.Utilization) is not int percent)
-            return new PanelRow(label, Unknown, resets, 0, UsageLevel.Unknown);
-
-        var level = percent >= 100 ? UsageLevel.Red : LevelFor(percent);
-        return new PanelRow(label, $"{percent}%", resets, Math.Clamp(window!.Utilization!.Value / 100, 0, 1), level);
-    }
-
-    public static IReadOnlyList<string> MenuLines(UsageState state, TimeZoneInfo zone, DateTimeOffset now)
-    {
-        var five = state.Snapshot?.FiveHour;
-        var seven = state.Snapshot?.SevenDay;
-        var lines = new List<string>
-        {
-            $"5-hour: {Percent(five)} · resets {FormatTime(five?.ResetsAt, zone, now)}",
-            $"7-day: {Percent(seven)} · resets {FormatTime(seven?.ResetsAt, zone, now)}",
-        };
-
-        if (state.Status == UsageStatus.Ok)
-        {
-            lines.Add($"Updated {FormatTime(state.LastUpdated, zone, now)}");
-        }
-        else
-        {
-            lines.Add(Capitalize(StatusText(state)));
-            if (state.IsStale)
-                lines.Add($"Stale, last updated {FormatTime(state.LastUpdated, zone, now)}");
-        }
-
-        return lines;
     }
 
     public static AccountRowModel AccountRow(AccountView view, TimeZoneInfo zone, DateTimeOffset now)
@@ -217,18 +163,7 @@ internal static class DisplayFormatter
         return local.ToString(format, CultureInfo.InvariantCulture);
     }
 
-    private static string StatusText(UsageState state) => state.Status switch
-    {
-        UsageStatus.Loading => "loading…",
-        UsageStatus.TokenExpired => "token expired, open Claude Code",
-        UsageStatus.NoCredentials => "no credentials, sign in to Claude Code",
-        _ => state.Error ?? "error",
-    };
-
     private static string Capitalize(string text) => char.ToUpperInvariant(text[0]) + text[1..];
-
-    private static string Percent(UsageWindow? window) =>
-        Round(window?.Utilization) is int percent ? $"{percent}%" : Unknown;
 
     private static int? Round(double? utilization) =>
         utilization is double value ? (int)Math.Round(Math.Max(0, value), MidpointRounding.AwayFromZero) : null;

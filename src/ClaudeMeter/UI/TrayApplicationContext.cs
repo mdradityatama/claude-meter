@@ -1,20 +1,18 @@
 using System.Diagnostics;
-using System.Reflection;
 using ClaudeMeter.Core;
 using Microsoft.Win32;
 
 namespace ClaudeMeter.UI;
 
-/// <summary>Owns the tray icon, its menu, the hover panel and the poll timer. No main window.</summary>
+/// <summary>
+/// Owns the tray icon, the panel (shown on hover, pinned on click), the poll timer and the accounts runtime.
+/// No main window, no context menu.
+/// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private const string UsagePageUrl = "https://claude.ai/settings/usage";
     private const int HoverShowDelayMs = 300;
     private const int HoverHideDelayMs = 400;
-
-    // NotifyIcon only opens its menu on right click; this is the same method it uses internally.
-    private static readonly MethodInfo? ShowContextMenuMethod =
-        typeof(NotifyIcon).GetMethod("ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
 
     private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();
     private readonly UsageClient _client = new();
@@ -22,20 +20,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly OAuthTokenClient _tokens = new();
     private readonly AccountsRuntime _runtime;
     private readonly StoreLoadResult _loaded;
-    private bool _started;
     private readonly NotifyIcon _notifyIcon;
-    private readonly ContextMenuStrip _menu = new();
-    private readonly ToolStripMenuItem _startWithWindowsItem;
-    private readonly List<ToolStripItem> _infoItems = [];
     private readonly System.Windows.Forms.Timer _timer = new();
-    private readonly UsagePanel _panel = new();
+    private readonly MeterPanel _panel = new();
     // Windows reports no "mouse left the tray icon" event, so hover is tracked by polling the cursor.
     private readonly System.Windows.Forms.Timer _hoverTimer = new() { Interval = 100 };
+    private readonly ClaudeFilesWatcher _watcher;
     private long _hoverStartedAt;
     private long? _leftAt;
     private Point _lastHoverPoint;
     private Icon? _icon;
-    private ClaudeFilesWatcher? _watcher;
+    private bool _pinned;
+    private bool _started;
 
     public TrayApplicationContext()
     {
@@ -44,30 +40,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _runtime = new AccountsRuntime(
             _paths, store, AppSettings.Load(_paths.Settings), _client, _profiles, _tokens, ClaudeLocks.ForSystem(_paths), TimeProvider.System);
 
-        _startWithWindowsItem = new ToolStripMenuItem("Start with Windows", null, OnStartWithWindowsClick) { CheckOnClick = true };
-        _menu.Items.AddRange(
-        [
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Refresh", null, OnRefreshClick),
-            new ToolStripMenuItem("Open claude.ai usage page", null, OnOpenUsagePageClick),
-            _startWithWindowsItem,
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Exit", null, (_, _) => ExitThread()),
-        ]);
-        _menu.Opening += OnMenuOpening;
-
-        _notifyIcon = new NotifyIcon { ContextMenuStrip = _menu, Visible = true };
+        _notifyIcon = new NotifyIcon { Visible = true };
         _notifyIcon.MouseUp += OnNotifyIconMouseUp;
         _notifyIcon.MouseMove += OnNotifyIconMouseMove;
 
-        _panel.RefreshRequested += OnRefreshClick;
-        _panel.UsagePageRequested += OnOpenUsagePageClick;
+        _runtime.Changed += (_, _) => UpdateTray();
+        _runtime.Notify += (_, toast) => _notifyIcon.ShowBalloonTip(5000, toast.Title, toast.Body, ToolTipIcon.None);
+        _panel.ActionRequested += OnPanelAction;
         _hoverTimer.Tick += OnHoverTick;
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
-        _runtime.Changed += (_, _) => UpdateTray();
-        _runtime.Notify += (_, toast) => _notifyIcon.ShowBalloonTip(5000, toast.Title, toast.Body, ToolTipIcon.None);
         UpdateTray();
 
         _watcher = new ClaudeFilesWatcher(_paths);
@@ -96,13 +80,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ScheduleNextPoll();
     }
 
-    private async void OnRefreshClick(object? sender, EventArgs e)
-    {
-        await _runtime.PollAsync(manual: true, CancellationToken.None);
-        UpdateTray();
-        ScheduleNextPoll();
-    }
-
     private void ScheduleNextPoll()
     {
         _timer.Stop();
@@ -112,22 +89,33 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void UpdateTray()
     {
-        var state = _runtime.ActiveUsage;
-
         var previous = _icon;
-        _icon = TrayIconRenderer.Render(DisplayFormatter.Icon(state));
+        _icon = TrayIconRenderer.Render(DisplayFormatter.Icon(_runtime.ActiveUsage));
         _notifyIcon.Icon = _icon;
         previous?.Dispose();
 
         if (_panel.Visible)
-            _panel.SetModel(CurrentPanelModel());
+            _panel.SetModel(CurrentModel());
     }
 
-    private PanelModel CurrentPanelModel() =>
-        DisplayFormatter.Panel(_runtime.ActiveUsage, TimeZoneInfo.Local, DateTimeOffset.Now);
+    private MeterPanelModel CurrentModel()
+    {
+        var zone = TimeZoneInfo.Local;
+        var now = DateTimeOffset.Now;
+        var accounts = _runtime.Accounts;
+        return new MeterPanelModel(
+            [.. accounts.Select(a => DisplayFormatter.AccountRow(a, zone, now))],
+            [.. accounts.Where(a => a.IsSaved).Select(a => DisplayFormatter.SettingsRow(a, zone, now))],
+            _pinned,
+            _runtime.KeepInactiveLive,
+            StartupRegistration.IsEnabled,
+            AppInfo.Version);
+    }
 
     private void OnNotifyIconMouseMove(object? sender, MouseEventArgs e)
     {
+        if (_pinned)
+            return;
         _lastHoverPoint = Cursor.Position;
         if (!_hoverTimer.Enabled)
         {
@@ -138,6 +126,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void OnHoverTick(object? sender, EventArgs e)
     {
+        if (_pinned)
+        {
+            _hoverTimer.Stop();
+            return;
+        }
+
         var cursor = Cursor.Position;
         var icon = TrayIconBounds.Get(_notifyIcon, _lastHoverPoint);
         var overIcon = icon.Contains(cursor);
@@ -145,14 +139,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         if (!_panel.Visible)
         {
-            if (!overIcon || _menu.Visible)
+            if (!overIcon)
                 _hoverTimer.Stop();
             else if (now - _hoverStartedAt >= HoverShowDelayMs)
-                _panel.ShowAt(icon, CurrentPanelModel());
+                ShowPanel(icon);
             return;
         }
 
-        // Stay open while the cursor is on the icon or the panel (so its links can be clicked).
+        // Stay open while the cursor is on the icon or the panel (so its buttons can be clicked).
         if (overIcon || _panel.Bounds.Contains(cursor))
         {
             _leftAt = null;
@@ -164,46 +158,92 @@ internal sealed class TrayApplicationContext : ApplicationContext
             HidePanel();
     }
 
+    /// <summary>Left or right click pins the panel as a widget; a click on a pinned panel's icon closes it.</summary>
+    private void OnNotifyIconMouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button is not (MouseButtons.Left or MouseButtons.Right))
+            return;
+        if (_pinned)
+        {
+            HidePanel();
+            return;
+        }
+
+        Pin();
+        ShowPanel(TrayIconBounds.Get(_notifyIcon, Cursor.Position));
+    }
+
+    private void ShowPanel(Rectangle icon)
+    {
+        _panel.SetModel(CurrentModel());
+        _panel.ShowAt(icon);
+    }
+
+    private void Pin()
+    {
+        _pinned = true;
+        _hoverTimer.Stop();
+        _leftAt = null;
+    }
+
     private void HidePanel()
     {
         _hoverTimer.Stop();
         _leftAt = null;
+        _pinned = false;
         _panel.Hide();
+        _panel.ResetView();
     }
 
-    private void OnMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
+    private async void OnPanelAction(object? sender, PanelAction action)
     {
-        HidePanel();
-
-        foreach (var item in _infoItems)
+        switch (action)
         {
-            _menu.Items.Remove(item);
-            item.Dispose();
+            case PanelAction.Refresh:
+                await _runtime.PollAsync(manual: true, CancellationToken.None);
+                ScheduleNextPoll();
+                break;
+            case PanelAction.TogglePin:
+                if (_pinned)
+                    HidePanel();
+                else
+                    Pin();
+                break;
+            case PanelAction.SettingsOpened:
+                Pin();
+                break;
+            case PanelAction.Switch switchTo:
+                await _runtime.SwitchAsync(switchTo.Key);
+                ScheduleNextPoll();
+                break;
+            case PanelAction.Remove remove:
+                await _runtime.RemoveAsync(remove.Key);
+                break;
+            case PanelAction.ToggleKeepLive:
+                _runtime.SetKeepInactiveLive(!_runtime.KeepInactiveLive);
+                break;
+            case PanelAction.ToggleStartWithWindows:
+                StartupRegistration.SetEnabled(!StartupRegistration.IsEnabled);
+                break;
+            case PanelAction.OpenUsagePage:
+                Process.Start(new ProcessStartInfo(UsagePageUrl) { UseShellExecute = true });
+                break;
+            case PanelAction.Exit:
+                ExitThread();
+                return;
         }
-        _infoItems.Clear();
 
-        foreach (var line in DisplayFormatter.MenuLines(_runtime.ActiveUsage, TimeZoneInfo.Local, DateTimeOffset.Now))
-            _infoItems.Add(new ToolStripMenuItem(line) { Enabled = false });
-
-        for (var i = 0; i < _infoItems.Count; i++)
-            _menu.Items.Insert(i, _infoItems[i]);
-
-        _startWithWindowsItem.Checked = StartupRegistration.IsEnabled;
+        if (_panel.Visible)
+            _panel.SetModel(CurrentModel());
     }
-
-    private void OnNotifyIconMouseUp(object? sender, MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Left)
-            ShowContextMenuMethod?.Invoke(_notifyIcon, null);
-    }
-
-    private void OnStartWithWindowsClick(object? sender, EventArgs e) =>
-        StartupRegistration.SetEnabled(_startWithWindowsItem.Checked);
-
-    private static void OnOpenUsagePageClick(object? sender, EventArgs e) =>
-        Process.Start(new ProcessStartInfo(UsagePageUrl) { UseShellExecute = true });
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => UpdateTray();
+
+    private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle)
+            _panel.ApplyTheme(SystemTheme.Current);
+    }
 
     protected override void ExitThreadCore()
     {
@@ -216,13 +256,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _timer.Dispose();
             _hoverTimer.Dispose();
+            _watcher.Dispose();
             _panel.Dispose();
             _notifyIcon.Dispose();
-            _menu.Dispose();
             _icon?.Dispose();
-            _watcher?.Dispose();
             _client.Dispose();
             _profiles.Dispose();
             _tokens.Dispose();

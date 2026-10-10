@@ -20,11 +20,11 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 |---|---|---|
 | 0. Plan in repo | done | c0dad18 |
 | 1. Core | done | b6dc10c |
-| 2. Accounts runtime | done | (hash in the next commit) |
-| 3. UI | not started | |
+| 2. Accounts runtime | done | 3e11572 |
+| 3. UI | done (manual tray check pending) | (hash in the next commit) |
 | 4. README and SPEC | not started | |
 
-**Next step:** Task 3.1, Step 1 (acrylic prototype; decision gate — ask the user if acrylic fails).
+**Next step:** Task 4.1, Step 1. Pending from Phase 3: user check of hover/pin/switch in the real tray (Task 3.5 Step 6).
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -51,6 +51,12 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 - 2026-10-11: Task 2.5: complete, full suite 234/234.
 - 2026-10-11: Task 2.6: Ruling: `TokenRefresher` blocks on the new `AccountStore.LastSaveFailed` instead of `HasUnsavedChanges`; the plan's flag was also true for ordinary pending usage updates mid-poll and silently blocked every 401 retry (found by `Inactive_401_with_refresh_retries_once_with_the_new_token`; regression test `Pending_unsaved_changes_do_not_block_refresh`) — cost if wrong: none, matches the spec's 'until the save succeeds'.
 - 2026-10-11: Task 2.6: complete, full suite 251/251; live run: store reloads, LastKnownAt persisted, no lock dirs left. Phase 2 committed.
+- 2026-10-11: Task 3.1: gate result: Transparency effects are off on this machine, so acrylic always shows DWM's fallback; GDI text breaks on a composited surface. User chose **solid Fluent** (no acrylic). Prototype stayed in the scratchpad; nothing committed from it.
+- 2026-10-11: Task 3.1: Ruling: no `FlyoutWindow` base class and no DWM backdrop/`WM_NCACTIVATE` code — with a solid backdrop the window logic is small and lives in `MeterPanel`; text uses `TextRenderer` (ClearType, as today) and alpha tokens are pre-blended onto the panel color — cost if wrong: a later acrylic attempt re-adds the backdrop code.
+- 2026-10-11: Task 3.1: Ruling: accent comes from `AccentPalette` index 1 (dark) and 4 (light), the WinUI mapping (AccentFillColorDefault = Light2 / Dark1); the spec's `#60CDFF`/`#005FB8` stay as the fallback when the value is missing — cost if wrong: accent shade slightly off.
+- 2026-10-11: Tasks 3.2–3.5: Ruling: done as one change set (UI has no tests and the phase is one commit); `UsagePanel` was deleted in the same change instead of being kept compiling against a theme shim — cost if wrong: none.
+- 2026-10-11: Tasks 3.2–3.5: Ruling: `CS_DROPSHADOW` gives the flyout its shadow; the settings action is `PanelAction.SettingsOpened` (the tray pins on it) — cost if wrong: cosmetic.
+- 2026-10-11: Tasks 3.2–3.5: verified by screenshots of the real `MeterPanel` in a scratch harness (main, settings, inline confirm, 10-account overflow, empty; dark and light) and a 12 s smoke run of the app; full suite 241/241 (10 old panel/menu tests removed with the old panel). Hover, pin and a real switch need the user (only one account on this machine). Phase 3 committed.
 
 ## Context
 
@@ -3356,7 +3362,7 @@ No automated UI tests (spec). Each task ends with a manual check on this machine
 - Create: `src/ClaudeMeter/UI/FlyoutWindow.cs` (kept as the panel's base class if the gate passes)
 - Modify: `src/ClaudeMeter/UI/NativeMethods.cs`
 
-- [ ] **Step 1: Interop.** Add to `NativeMethods`:
+- [x] **Step 1: Interop.** Add to `NativeMethods`:
 
 ```csharp
 public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
@@ -3378,11 +3384,11 @@ public struct MARGINS
 public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 ```
 
-- [ ] **Step 2: `FlyoutWindow`**: borderless, `ShowWithoutActivation`, `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` (moved from `UsagePanel`), `DoubleBuffered`, `AutoScaleMode.None`. `ApplyBackdrop(bool dark, bool acrylic, Color solid, Color border)` sets dark mode, round corners, border color, and either `DWMSBT_TRANSIENTWINDOW` + `DwmExtendFrameIntoClientArea(-1,-1,-1,-1)` (`BackColor = Color.Black`, paint background with `Graphics.Clear(Color.Transparent)`) or `DWMSBT_NONE` + solid `BackColor`. `WndProc` override: on `WM_NCACTIVATE` force `m.WParam = 1` when acrylic is on, so DWM keeps drawing the active backdrop. A protected `bool Acrylic` tells subclasses which text path to use.
+- [x] **Step 2: `FlyoutWindow`**: borderless, `ShowWithoutActivation`, `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` (moved from `UsagePanel`), `DoubleBuffered`, `AutoScaleMode.None`. `ApplyBackdrop(bool dark, bool acrylic, Color solid, Color border)` sets dark mode, round corners, border color, and either `DWMSBT_TRANSIENTWINDOW` + `DwmExtendFrameIntoClientArea(-1,-1,-1,-1)` (`BackColor = Color.Black`, paint background with `Graphics.Clear(Color.Transparent)`) or `DWMSBT_NONE` + solid `BackColor`. `WndProc` override: on `WM_NCACTIVATE` force `m.WParam = 1` when acrylic is on, so DWM keeps drawing the active backdrop. A protected `bool Acrylic` tells subclasses which text path to use.
 
-- [ ] **Step 3: Throwaway test page.** Temporarily make `ShowAt` of the current panel use `FlyoutWindow` with a hard-coded 360×300 page: title, a line of 12 px secondary text, a 4 px bar, drawn with GDI+ (`TextRenderingHint.AntiAliasGridFit`, `SmoothingMode.AntiAlias`).
+- [x] **Step 3: Throwaway test page.** Temporarily make `ShowAt` of the current panel use `FlyoutWindow` with a hard-coded 360×300 page: title, a line of 12 px secondary text, a 4 px bar, drawn with GDI+ (`TextRenderingHint.AntiAliasGridFit`, `SmoothingMode.AntiAlias`).
 
-- [ ] **Step 4: Gate checks** (hover the tray icon while another app has focus):
+- [x] **Step 4: Gate checks** (hover the tray icon while another app has focus):
   1. The backdrop is blurred/tinted, not the flat fallback color, while the panel is inactive. Try without the `WM_NCACTIVATE` override first, then with it.
   2. Text is crisp and fully opaque in dark and light theme; no black fringes.
   3. No flicker when the page repaints on hover changes.
@@ -3390,7 +3396,7 @@ public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m
   5. Corners rounded, 1 px border, shadow present.
   6. `Segoe UI Variable Text` and `Segoe UI Variable Text Semibold` resolve (else fall back to `Segoe UI` / `Segoe UI Semibold`); `Segoe Fluent Icons` glyphs E72C (Refresh), E713 (Settings), E718 (Pin), E840 (Pinned), E72B (Back), E7BA (Warning), E946 (Info), E8A7 (Open in new) render.
   7. Accent palette: with the default blue accent, `AccentPalette` index 1 reads `#60CDFF` and index 4 reads `#005FB8`. If not, find the indices that do and use those.
-- [ ] **Step 5: Decide.** All pass → keep `FlyoutWindow` with acrylic and GDI+ text. Check 1 fails with and without the override → **stop and ask the user** (solid Fluent fallback recommended). Record the outcome under Spike findings in the spec. Remove the throwaway page.
+- [x] **Step 5: Decide.** All pass → keep `FlyoutWindow` with acrylic and GDI+ text. Check 1 fails with and without the override → **stop and ask the user** (solid Fluent fallback recommended). Record the outcome under Spike findings in the spec. Remove the throwaway page.
 
 ### Task 3.2: Fluent theme tokens
 
@@ -3401,7 +3407,7 @@ public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m
 **Interfaces:**
 - Produces: `record FluentTheme(bool Dark, bool Transparency, Color Text, Color Text2, Color Text3, Color RowFill, Color RowActive, Color Badge, Color Track, Color ButtonFill, Color ButtonBorder, Color SubtleHover, Color Ok, Color Caution, Color Critical, Color CriticalTint, Color Accent, Color OnAccent, Color ToggleOff, Color PanelSolid, Color PanelBorder)`; `SystemTheme.Current → FluentTheme` (replaces `ThemeColors`); `FluentTheme.ForLevel(UsageLevel) → Color` (bar fills: Green → Ok, Yellow → Caution, Red → Critical, else Track); `FluentTheme.For(Tone) → Color`.
 
-- [ ] **Step 1: Implement** with the spec table and the mockup values:
+- [x] **Step 1: Implement** with the spec table and the mockup values:
 
 | Token | Dark | Light |
 |---|---|---|
@@ -3417,7 +3423,7 @@ public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m
 
   `Dark` from `SystemUsesLightTheme` (as today); `Transparency` from `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\EnableTransparency` (missing = on); `Accent` from `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent\AccentPalette` (32 bytes, RGBA per entry, indices from Task 3.1 check 7), default when missing.
 
-- [ ] **Step 2: Build.** `UsagePanel` still compiles against `SystemTheme.Current` by mapping its old fields (`Background = PanelSolid`, `Border = PanelBorder`, `Separator = PanelBorder`, `Text`, `SecondaryText = Text2`, `Track`, `Link = Accent`) until Task 3.5 deletes it.
+- [x] **Step 2: Build.** `UsagePanel` still compiles against `SystemTheme.Current` by mapping its old fields (`Background = PanelSolid`, `Border = PanelBorder`, `Separator = PanelBorder`, `Text`, `SecondaryText = Text2`, `Track`, `Link = Accent`) until Task 3.5 deletes it.
 
 ### Task 3.3: MeterPanel main view
 
@@ -3431,18 +3437,18 @@ public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m
   - `abstract record PanelAction` with `Refresh`, `OpenSettings`, `TogglePin`, `Switch(AccountKey)`, `Remove(AccountKey)`, `ToggleKeepLive`, `ToggleStartWithWindows`, `OpenUsagePage`, `Exit`.
   - `MeterPanel : FlyoutWindow` with `ShowAt(Rectangle icon)`, `SetModel(MeterPanelModel)`, `ApplyTheme(FluentTheme)`, `bool InSettings`, `event EventHandler<PanelAction>? ActionRequested`.
 
-- [ ] **Step 1: Structure.** One `LayOut(Graphics? g)` pass both measures (g null) and paints, as `UsagePanel` does today, so layout and drawing cannot drift. The pass rebuilds `List<(Rectangle Bounds, Hit Hit)> _hits`, where `Hit` is a record of kind + optional `AccountKey`. `OnMouseMove`: hit-test; if the hovered hit changed, `Invalidate()`. `OnMouseLeave`: clear hover. `OnMouseDown`/`OnMouseUp`: pressed state; on up over the same hit, raise `ActionRequested` (or handle view-local hits: Settings, Back, ask/cancel remove). No timers, no animation. Paint only on `SetModel`, theme/DPI change, or hover/pressed change.
-- [ ] **Step 2: Caches.** `PanelFonts(float scale)` (Title/Email 14 px semibold, Body 14 px, Small 12 px, SmallSemibold 12 px, Badge 11 px, Icons 16 px and 12 px `Segoe Fluent Icons`) rebuilt on DPI change; brushes and pens per theme in one `PanelBrushes(FluentTheme)` disposed on theme change; text measurements in `Dictionary<(string, FontKind), Size>` cleared on either change. Text through GDI+ `DrawString` with `StringFormat` (`NoWrap`, `EllipsisCharacter`) when acrylic, `TextRenderer` when solid (Task 3.1 decides).
-- [ ] **Step 3: Main view layout (logical px, from the mockup).** Width 360. Header 48 high, padding 8/8/4/16: "Claude Meter" 14 semibold; three 32×32 icon buttons (gap 2): Refresh, Settings, Pin (pinned: accent glyph E840 on ButtonFill; unpinned: E718 in Text2). List padding 4/8/8, rows 4 apart. Row: radius 6, padding 8/12/10/16, RowFill (active: RowActive + 3×16 accent pill at left 0, top 18, radius 2). Line 1 (min height 32): email 14 semibold with ellipsis + plan badge (11 px, padding 0 6, radius 4, Badge fill, Text2); right side "Active" (12 semibold, Accent) / Switch button (32 high, padding 0 14, 14 px, radius 4, ButtonFill + ButtonBorder) / disabled "Switching…" button / "Login expired" (12 semibold, Critical). Gap 6. Grid rows "5h" and "7d": label column 20 (Text2), bar 1fr (4 px, radius 2, Track; fill `ForLevel`), percent column 36 right-aligned semibold (Text3 when `Inferred`), reset column 64 right-aligned Text3; column gap 8, row gap 6. Gap 6. Status line: left status (`For(StatusTone)`, Text3 for Muted, ellipsis), right login text (Caution: semibold + E7BA 12 px glyph).
-- [ ] **Step 4: Overflow.** Height = content height, clamped to work area height − 2 × gap. If clamped, the account list scrolls with `OnMouseWheel` (Windows routes wheel input to the window under the cursor by default) and clips to its area.
-- [ ] **Step 5: Manual check:** with 1, 3 and 8 accounts (8 via a temporary fake model), both themes, 100%/150%: matches the `Main` and `States` artboards; hover fills appear only on buttons; no flicker.
+- [x] **Step 1: Structure.** One `LayOut(Graphics? g)` pass both measures (g null) and paints, as `UsagePanel` does today, so layout and drawing cannot drift. The pass rebuilds `List<(Rectangle Bounds, Hit Hit)> _hits`, where `Hit` is a record of kind + optional `AccountKey`. `OnMouseMove`: hit-test; if the hovered hit changed, `Invalidate()`. `OnMouseLeave`: clear hover. `OnMouseDown`/`OnMouseUp`: pressed state; on up over the same hit, raise `ActionRequested` (or handle view-local hits: Settings, Back, ask/cancel remove). No timers, no animation. Paint only on `SetModel`, theme/DPI change, or hover/pressed change.
+- [x] **Step 2: Caches.** `PanelFonts(float scale)` (Title/Email 14 px semibold, Body 14 px, Small 12 px, SmallSemibold 12 px, Badge 11 px, Icons 16 px and 12 px `Segoe Fluent Icons`) rebuilt on DPI change; brushes and pens per theme in one `PanelBrushes(FluentTheme)` disposed on theme change; text measurements in `Dictionary<(string, FontKind), Size>` cleared on either change. Text through GDI+ `DrawString` with `StringFormat` (`NoWrap`, `EllipsisCharacter`) when acrylic, `TextRenderer` when solid (Task 3.1 decides).
+- [x] **Step 3: Main view layout (logical px, from the mockup).** Width 360. Header 48 high, padding 8/8/4/16: "Claude Meter" 14 semibold; three 32×32 icon buttons (gap 2): Refresh, Settings, Pin (pinned: accent glyph E840 on ButtonFill; unpinned: E718 in Text2). List padding 4/8/8, rows 4 apart. Row: radius 6, padding 8/12/10/16, RowFill (active: RowActive + 3×16 accent pill at left 0, top 18, radius 2). Line 1 (min height 32): email 14 semibold with ellipsis + plan badge (11 px, padding 0 6, radius 4, Badge fill, Text2); right side "Active" (12 semibold, Accent) / Switch button (32 high, padding 0 14, 14 px, radius 4, ButtonFill + ButtonBorder) / disabled "Switching…" button / "Login expired" (12 semibold, Critical). Gap 6. Grid rows "5h" and "7d": label column 20 (Text2), bar 1fr (4 px, radius 2, Track; fill `ForLevel`), percent column 36 right-aligned semibold (Text3 when `Inferred`), reset column 64 right-aligned Text3; column gap 8, row gap 6. Gap 6. Status line: left status (`For(StatusTone)`, Text3 for Muted, ellipsis), right login text (Caution: semibold + E7BA 12 px glyph).
+- [x] **Step 4: Overflow.** Height = content height, clamped to work area height − 2 × gap. If clamped, the account list scrolls with `OnMouseWheel` (Windows routes wheel input to the window under the cursor by default) and clips to its area.
+- [x] **Step 5: Manual check:** with 1, 3 and 8 accounts (8 via a temporary fake model), both themes, 100%/150%: matches the `Main` and `States` artboards; hover fills appear only on buttons; no flicker.
 
 ### Task 3.4: Settings view
 
 **Files:** Modify `src/ClaudeMeter/UI/MeterPanel.cs`
 
-- [ ] **Step 1: Layout (from the `Settings` artboard).** Header: Back button (E72B) + "Settings". "Accounts" label (12 semibold, Text2, padding 8/8/4). Rows (padding 8/8/8/12, radius 6, RowFill): email 14 semibold + sub line 12 px (`For(SubTone)`, Text3 for Muted), Remove button. Confirming row: CriticalTint fill, text "Remove **<email>** from Claude Meter? Claude Code is not changed." plus, for the active row, " It's the active account, so Claude Meter saves it again at the next check."; buttons Cancel and Remove (Critical text). Only one row confirms at a time; switching views cancels it. Hint with E946: "To add an account, run /login in Claude Code with it. Claude Meter saves it automatically. Don't run /logout first: it can revoke the saved login." Separator. Toggles (40×20 track, 12 px knob; on: Accent fill, OnAccent knob; off: ToggleOff stroke and knob): "Keep inactive accounts live" with sub "Refreshes their tokens in the background", and "Start with Windows". Link row "Open claude.ai usage page" with E8A7. Separator. Footer: "Version {AppInfo.Version}" (Text3) and Exit button.
-- [ ] **Step 2: Manual check** against the artboard, both themes; the inline confirmation works without any dialog.
+- [x] **Step 1: Layout (from the `Settings` artboard).** Header: Back button (E72B) + "Settings". "Accounts" label (12 semibold, Text2, padding 8/8/4). Rows (padding 8/8/8/12, radius 6, RowFill): email 14 semibold + sub line 12 px (`For(SubTone)`, Text3 for Muted), Remove button. Confirming row: CriticalTint fill, text "Remove **<email>** from Claude Meter? Claude Code is not changed." plus, for the active row, " It's the active account, so Claude Meter saves it again at the next check."; buttons Cancel and Remove (Critical text). Only one row confirms at a time; switching views cancels it. Hint with E946: "To add an account, run /login in Claude Code with it. Claude Meter saves it automatically. Don't run /logout first: it can revoke the saved login." Separator. Toggles (40×20 track, 12 px knob; on: Accent fill, OnAccent knob; off: ToggleOff stroke and knob): "Keep inactive accounts live" with sub "Refreshes their tokens in the background", and "Start with Windows". Link row "Open claude.ai usage page" with E8A7. Separator. Footer: "Version {AppInfo.Version}" (Text3) and Exit button.
+- [x] **Step 2: Manual check** against the artboard, both themes; the inline confirmation works without any dialog.
 
 ### Task 3.5: Tray behavior, notifications, cleanup, commit Phase 3
 
@@ -3450,13 +3456,13 @@ public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m
 - Modify: `src/ClaudeMeter/UI/TrayApplicationContext.cs`, `src/ClaudeMeter/Core/DisplayFormatter.cs`, `tests/ClaudeMeter.Tests/DisplayFormatterTests.cs`
 - Delete: `src/ClaudeMeter/UI/UsagePanel.cs`
 
-- [ ] **Step 1: Remove the context menu**: `_menu`, `_startWithWindowsItem`, `_infoItems`, `ShowContextMenuMethod`, `OnMenuOpening`, the `ContextMenuStrip` assignment and `using System.Reflection`. `NotifyIcon.Text` stays unset.
-- [ ] **Step 2: Pin.** Field `bool _pinned`. `MouseUp` (left or right): if pinned → unpin and hide; else pin and `ShowAt(icon)`. `OnHoverTick` returns immediately while pinned. `ActionRequested`: `TogglePin` unpins and hides; `OpenSettings` from a hover panel pins it; `Refresh` → `PollAsync(manual: true)`; `Switch(key)` → `_runtime.SwitchAsync(key)`; `Remove(key)` → `RemoveAsync`; `ToggleKeepLive` → `SetKeepInactiveLive(!current)`; `ToggleStartWithWindows` → `StartupRegistration.SetEnabled(!IsEnabled)`; `OpenUsagePage` → existing handler; `Exit` → `ExitThread()`. After each action, `SetModel(CurrentModel())`.
-- [ ] **Step 3: Model.** `CurrentModel()` maps `_runtime.Accounts` through `DisplayFormatter.AccountRow` and `SettingsRow` with `TimeZoneInfo.Local` and `DateTimeOffset.Now`; `Pinned = _pinned`; `KeepInactiveLive = _runtime.KeepInactiveLive`; `StartWithWindows = StartupRegistration.IsEnabled`; `Version = AppInfo.Version`. `_runtime.Changed` → icon update + `SetModel` if visible.
-- [ ] **Step 4: Theme.** `SystemEvents.UserPreferenceChanged` (categories `General`, `Color`, `VisualStyle`) → `_panel.ApplyTheme(SystemTheme.Current)`; unsubscribe in `Dispose`.
-- [ ] **Step 5: Cleanup.** Delete `UsagePanel.cs`; remove `DisplayFormatter.Panel`, `PanelRow`, `PanelModel`, `MenuLines` and the old `ThemeColors` mapping; delete tests `Panel_rows_for_ok_state`, `Panel_rows_show_dash_and_empty_bar_when_unknown`, `Panel_bar_is_clamped_to_full`, `Panel_status_line`, `Menu_lines_for_ok_state`, `Menu_lines_for_token_expired_with_old_data` (their cases are covered by `AccountRowTests`; add `Bar_is_clamped_to_full` there for the 130% case).
+- [x] **Step 1: Remove the context menu**: `_menu`, `_startWithWindowsItem`, `_infoItems`, `ShowContextMenuMethod`, `OnMenuOpening`, the `ContextMenuStrip` assignment and `using System.Reflection`. `NotifyIcon.Text` stays unset.
+- [x] **Step 2: Pin.** Field `bool _pinned`. `MouseUp` (left or right): if pinned → unpin and hide; else pin and `ShowAt(icon)`. `OnHoverTick` returns immediately while pinned. `ActionRequested`: `TogglePin` unpins and hides; `OpenSettings` from a hover panel pins it; `Refresh` → `PollAsync(manual: true)`; `Switch(key)` → `_runtime.SwitchAsync(key)`; `Remove(key)` → `RemoveAsync`; `ToggleKeepLive` → `SetKeepInactiveLive(!current)`; `ToggleStartWithWindows` → `StartupRegistration.SetEnabled(!IsEnabled)`; `OpenUsagePage` → existing handler; `Exit` → `ExitThread()`. After each action, `SetModel(CurrentModel())`.
+- [x] **Step 3: Model.** `CurrentModel()` maps `_runtime.Accounts` through `DisplayFormatter.AccountRow` and `SettingsRow` with `TimeZoneInfo.Local` and `DateTimeOffset.Now`; `Pinned = _pinned`; `KeepInactiveLive = _runtime.KeepInactiveLive`; `StartWithWindows = StartupRegistration.IsEnabled`; `Version = AppInfo.Version`. `_runtime.Changed` → icon update + `SetModel` if visible.
+- [x] **Step 4: Theme.** `SystemEvents.UserPreferenceChanged` (categories `General`, `Color`, `VisualStyle`) → `_panel.ApplyTheme(SystemTheme.Current)`; unsubscribe in `Dispose`.
+- [x] **Step 5: Cleanup.** Delete `UsagePanel.cs`; remove `DisplayFormatter.Panel`, `PanelRow`, `PanelModel`, `MenuLines` and the old `ThemeColors` mapping; delete tests `Panel_rows_for_ok_state`, `Panel_rows_show_dash_and_empty_bar_when_unknown`, `Panel_bar_is_clamped_to_full`, `Panel_status_line`, `Menu_lines_for_ok_state`, `Menu_lines_for_token_expired_with_old_data` (their cases are covered by `AccountRowTests`; add `Bar_is_clamped_to_full` there for the 130% case).
 - [ ] **Step 6: Manual end-to-end check** (see Verification) then `dotnet test`.
-- [ ] **Step 7: Commit Phase 3**
+- [x] **Step 7: Commit Phase 3**
 
 ```powershell
 git add docs/MULTI-ACCOUNT-PLAN.md docs/MULTI-ACCOUNT-SPEC.md src tests

@@ -2,35 +2,30 @@ using Microsoft.Win32;
 
 namespace ClaudeMeter.UI;
 
-internal sealed record ThemeColors(Color Background, Color Border, Color Separator, Color Text, Color SecondaryText, Color Track, Color Link);
-
-/// <summary>Follows the Windows system (taskbar) theme, like the built-in tray flyouts.</summary>
+/// <summary>Follows the Windows system (taskbar) theme and accent color, like the built-in tray flyouts.</summary>
 internal static class SystemTheme
 {
-    private static readonly ThemeColors Dark = new(
-        Background: Color.FromArgb(0x2B, 0x2B, 0x2B),
-        Border: Color.FromArgb(0x45, 0x45, 0x45),
-        Separator: Color.FromArgb(0x3D, 0x3D, 0x3D),
-        Text: Color.FromArgb(0xFF, 0xFF, 0xFF),
-        SecondaryText: Color.FromArgb(0xC5, 0xC5, 0xC5),
-        Track: Color.FromArgb(0x45, 0x45, 0x45),
-        Link: Color.FromArgb(0x60, 0xCD, 0xFF));
+    // AccentPalette holds Light3, Light2, Light1, Accent, Dark1, Dark2, Dark3 (RGBA each). WinUI uses
+    // Light2 for accent text on dark and Dark1 on light.
+    private const int DarkAccentIndex = 1;
+    private const int LightAccentIndex = 4;
 
-    private static readonly ThemeColors Light = new(
-        Background: Color.FromArgb(0xF9, 0xF9, 0xF9),
-        Border: Color.FromArgb(0xD5, 0xD5, 0xD5),
-        Separator: Color.FromArgb(0xE5, 0xE5, 0xE5),
-        Text: Color.FromArgb(0x1A, 0x1A, 0x1A),
-        SecondaryText: Color.FromArgb(0x5F, 0x5F, 0x5F),
-        Track: Color.FromArgb(0xE0, 0xE0, 0xE0),
-        Link: Color.FromArgb(0x00, 0x5F, 0xB8));
-
-    public static ThemeColors Current
+    public static FluentTheme Current
     {
         get
         {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            return key?.GetValue("SystemUsesLightTheme") is int light && light != 0 ? Light : Dark;
+            using var personalize = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var dark = personalize?.GetValue("SystemUsesLightTheme") is not int light || light == 0;
+
+            using var accent = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent");
+            Color? accentColor = accent?.GetValue("AccentPalette") is byte[] palette && palette.Length >= 28
+                ? FromPalette(palette, dark ? DarkAccentIndex : LightAccentIndex)
+                : null;
+
+            return FluentTheme.Create(dark, accentColor);
         }
     }
+
+    private static Color FromPalette(byte[] palette, int index) =>
+        Color.FromArgb(palette[index * 4], palette[index * 4 + 1], palette[index * 4 + 2]);
 }

@@ -39,6 +39,7 @@ Visual reference: the approved mockup (private artifact) at https://claude.ai/ar
   - Token endpoint: `POST https://platform.claude.com/v1/oauth/token`, JSON body `grant_type=refresh_token`, `refresh_token`, `client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e`. Refresh tokens rotate (a used refresh token is spent).
   - Profile endpoint: `GET https://api.anthropic.com/api/oauth/profile` with the bearer token returns `account.uuid`, `account.email`, `organization.uuid`. It must not be called while holding any lock.
 - Profile schema confirmed on 2026-10-11 (with `anthropic-beta: oauth-2025-04-20`): top-level `account`, `organization`, `application`, `enabled_plugins`; `account.uuid`, `account.email` and `organization.uuid` are present.
+- Phase 3 prototype on 2026-10-11 (borderless, non-activating popup): Transparency effects are off on this machine (`EnableTransparency=0`), so the DWM transient backdrop always shows DWM's flat fallback color, with or without a `WM_NCACTIVATE` override; acrylic on a never-focused window could not be verified. GDI (`TextRenderer`) text loses alpha on the composited surface (unreadable in light theme); GDI+ grayscale text is fine. `Segoe UI Variable Text`, `Segoe UI Variable Text Semibold` and `Segoe Fluent Icons` resolve. `AccentPalette` holds Light3…Dark3 at indices 0–6 (default blue: [1] `#4CC2FF`, [4] `#0067C0`). **Decision (user, 2026-10-11): solid Fluent backdrop, no acrylic.**
 - Login-expiry baseline on 2026-10-11: `expiresAt` 2026-10-11 04:01:58Z, `refreshTokenExpiresAt` 2026-10-24 01:03:01Z. Compare after Claude Code's next refresh (see Open items).
 
 ## Key decisions
@@ -207,7 +208,7 @@ Follow the approved mockup. Windows 11 native look, performance first.
 - "Saved accounts couldn't be read" / "Claude Meter kept the old file and starts fresh. Accounts are saved again as you use them." (Account store)
 
 **Visual system**
-- Backdrop: DWM acrylic (`DWMWA_SYSTEMBACKDROP_TYPE` = transient window) with dark-mode attribute set per theme; solid fallback when transparency effects are off or the backdrop is unavailable. Prove it on a borderless popup in a prototype before building the panel.
+- Backdrop: solid panel color (dark `#262628`, light `#F3F3F3`) with the dark-mode attribute set per theme. Acrylic was dropped after the prototype (see Spike findings); semi-transparent tokens below are blended onto the panel color once per theme.
 - Rounded corners (`DWMWCP_ROUND`), 1 px border, flyout shadow. 360 px logical width.
 - Type: Segoe UI Variable (14 px titles and emails, 12 px secondary). Icons: Segoe Fluent Icons glyphs.
 - Colors follow the system theme (existing `SystemTheme`) and the system accent color; update on theme change.
@@ -265,5 +266,5 @@ Also update `docs/SPEC.md`'s Security section so it no longer contradicts this s
 ## Open items
 - Observe `refreshTokenExpiresAt` before and after Claude Code's next token refresh to confirm a refresh does not change it (baseline recorded in Spike findings).
 - ~~Phase 1, first step: call the profile endpoint once and print only its key names to confirm the schema.~~ Done 2026-10-11, see Spike findings.
-- Phase 3, first step: acrylic backdrop on a borderless, non-activating popup. Windows draws system backdrops in full only for active windows, and this panel never activates; test a `WM_NCACTIVATE` override, and draw text with GDI+ (GDI text has no alpha on a composited surface). If acrylic still fails, ask before choosing between the solid fallback and the undocumented `SetWindowCompositionAttribute`.
+- ~~Phase 3, first step: acrylic backdrop on a borderless, non-activating popup.~~ Done 2026-10-11: solid backdrop chosen, see Spike findings.
 - Observe whether a Claude Code session that was open during a switch later writes its cached `oauthAccount` back into the global config. Checks 1 and 2 already stop a wrong capture in that case.
