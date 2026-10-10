@@ -18,17 +18,31 @@ This plan lives in the repo as `docs/MULTI-ACCOUNT-PLAN.md` (Task 0) so any late
 
 | Phase | Status | Commit |
 |---|---|---|
-| 0. Plan in repo | done | (hash added in the Phase 1 commit) |
-| 1. Core | not started | |
+| 0. Plan in repo | done | c0dad18 |
+| 1. Core | done | (hash in the next commit) |
 | 2. Accounts runtime | not started | |
 | 3. UI | not started | |
 | 4. README and SPEC | not started | |
 
-**Next step:** Task 1.0, Step 1. Execution method: Native (implemented in-session, one fresh reviewer for the whole branch at the end).
+**Next step:** Task 2.1, Step 1.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
 - 2026-10-11: Plan approved. Spec items 1–13 below are the agreed changes to the spec.
+- 2026-10-11: Work happens on branch `multi-account` (user's choice); merge after the final review.
+- 2026-10-11: Ruling: the executing-plans ledger scripts are missing from this install, so this Progress section is the ledger — cost if wrong: none, the record is the same.
+- 2026-10-11: Task 1.0: profile schema confirmed (`account.uuid`, `account.email`, `organization.uuid`); login-expiry baseline recorded in the spec; spec items 1–13 folded into the spec. The after-refresh comparison stays an open item.
+- 2026-10-11: Task 1.1: Ruling: FindMember takes the value reader as a `ref` parameter declared by the caller instead of `out` (C# ref-safety error CS8352) — cost if wrong: none, same behavior.
+- 2026-10-11: Task 1.1: complete, JsonSpliceTests 15/15.
+- 2026-10-11: Task 1.2: complete, full suite 96/96 (ClaudePathsTests, LoginFilesTests added; CredentialsTests removed with the old reader).
+- 2026-10-11: Task 1.3: Ruling: `ClaudeJson.Credentials` uses a `$` raw string because the plan's `` form collides with the literal `}}` (CS9007) — cost if wrong: none.
+- 2026-10-11: Task 1.3: complete, full suite 109/109 (added Remove and FindByCredentials tests beyond the plan list).
+- 2026-10-11: Task 1.4: complete, full suite 118/118.
+- 2026-10-11: Task 1.5: complete, full suite 137/137.
+- 2026-10-11: Task 1.6: complete, full suite 152/152.
+- 2026-10-11: Task 1.7: complete, full suite 169/169 (added Verified_unknown_active_account_is_saved_before_the_switch and Progress_reports_lock_wait_then_writing).
+- 2026-10-11: Task 1.8: Ruling: the plaintext check uses the account's email string, not `Select-String '@'`, because random ciphertext bytes can contain '@' — cost if wrong: none.
+- 2026-10-11: Task 1.8: live run verified: `accounts.dat` created as a DPAPI blob without email or token; no lock dirs or temp files left. Phase 1 committed.
 
 ## Context
 
@@ -151,7 +165,7 @@ Account A active, target T stored and not expired. Everything below runs inside 
 
 - [x] **Step 1:** Copy this plan to `docs/MULTI-ACCOUNT-PLAN.md`. Set Progress row 0 to "done" and **Next step** to "Task 1.0, Step 1".
 - [x] **Step 2:** Save a project memory: "Multi-account work is tracked in `docs/MULTI-ACCOUNT-PLAN.md` (Progress section at the top); read it first when continuing" and add its pointer to `MEMORY.md`.
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add docs/MULTI-ACCOUNT-PLAN.md docs/MULTI-ACCOUNT-SPEC.md
@@ -175,7 +189,7 @@ Commands used throughout (repo root, PowerShell):
 
 **Files:** Modify `docs/MULTI-ACCOUNT-SPEC.md`
 
-- [ ] **Step 1: Confirm the profile schema (open item).** Prints key paths only, never values or the token:
+- [x] **Step 1: Confirm the profile schema (open item).** Prints key paths only, never values or the token:
 
 ```powershell
 $t = (Get-Content "$env:USERPROFILE\.claude\.credentials.json" -Raw | ConvertFrom-Json).claudeAiOauth.accessToken
@@ -185,7 +199,7 @@ Keys $r ''
 ```
 Expected: the list contains `account.uuid`, `account.email`, `organization.uuid`. If `anthropic-beta` is not needed or another key name appears, adjust `ProfileParser` (Task 1.5) to match.
 
-- [ ] **Step 2: Record the login-expiry baseline (open item).** Prints timestamps only:
+- [x] **Step 2: Record the login-expiry baseline (open item).** Prints timestamps only:
 
 ```powershell
 $o = (Get-Content "$env:USERPROFILE\.claude\.credentials.json" -Raw | ConvertFrom-Json).claudeAiOauth
@@ -193,7 +207,7 @@ $o = (Get-Content "$env:USERPROFILE\.claude\.credentials.json" -Raw | ConvertFro
 ```
 Run again after Claude Code's next refresh (about 8 h later). Expected: `expiresAt` moves, `refreshTokenExpiresAt` does not.
 
-- [ ] **Step 3: Fold "Spec items to reconsider" 1–13 into the spec** (Capture verification step 4, Switch transaction steps 1/3/8, Token refresh, Usage reset inference, Notifications, Account store), and add item 8 to Open items. Record Step 1's result under Spike findings.
+- [x] **Step 3: Fold "Spec items to reconsider" 1–13 into the spec** (Capture verification step 4, Switch transaction steps 1/3/8, Token refresh, Usage reset inference, Notifications, Account store), and add item 8 to Open items. Record Step 1's result under Spike findings.
 
 ### Task 1.1: JsonSplice
 
@@ -204,7 +218,7 @@ Run again after Claude Code's next refresh (about 8 h later). Expected: `expires
 **Interfaces:**
 - Produces: `JsonSplice.Find(ReadOnlySpan<byte> json, params string[] path) → (int Start, int Length)?`; `JsonSplice.Replace(ReadOnlySpan<byte> json, ReadOnlySpan<byte> newValue, params string[] path) → byte[]`; `EncodeString(string) → byte[]`, `EncodeNumber(long) → byte[]`, `EncodeStringArray(IReadOnlyList<string>) → byte[]`. Throws `FormatException` for invalid JSON, a non-object on the path, a duplicate target name, or (Replace) a missing path.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 using System.Text;
@@ -312,9 +326,9 @@ public class JsonSpliceTests
 }
 ```
 
-- [ ] **Step 2: Run, expect FAIL** (`JsonSplice` does not exist): `dotnet test --filter "FullyQualifiedName~JsonSpliceTests"`
+- [x] **Step 2: Run, expect FAIL** (`JsonSplice` does not exist): `dotnet test --filter "FullyQualifiedName~JsonSpliceTests"`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 using System.Globalization;
@@ -403,7 +417,7 @@ internal static class JsonSplice
 }
 ```
 
-- [ ] **Step 4: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~JsonSpliceTests"`. If `Span_of_a_string_includes_its_quotes` fails, `TokenStartIndex` excludes the opening quote on this runtime: subtract 1 for `JsonTokenType.String` and re-run.
+- [x] **Step 4: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~JsonSpliceTests"`. If `Span_of_a_string_includes_its_quotes` fails, `TokenStartIndex` excludes the opening quote on this runtime: subtract 1 for `JsonTokenType.String` and re-run.
 
 ### Task 1.2: ClaudePaths and login files
 
@@ -423,7 +437,7 @@ internal static class JsonSplice
   - `record LiveFiles(byte[]? Credentials, byte[]? GlobalConfig)` with `static Read(ClaudePaths)`, `static ReadOrNull(string)`, `static ReadAccessToken(ClaudePaths) → string?`.
   - `record LiveLogin(byte[] CredentialsJson, CredentialsInfo Credentials, OAuthAccount Account)` with `static From(LiveFiles) → LiveLogin?` and `SameAs(LiveLogin) → bool` (credentials bytes and `oauthAccount` bytes equal).
 
-- [ ] **Step 1: Write the failing tests.** `ClaudePathsTests` (all use `realPath: p => p`, `localAppData: @"C:\Users\me\AppData\Local"`):
+- [x] **Step 1: Write the failing tests.** `ClaudePathsTests` (all use `realPath: p => p`, `localAppData: @"C:\Users\me\AppData\Local"`):
   - `Defaults_to_user_profile`: env has only `USERPROFILE=C:\Users\me`, no files. Expect `ConfigHome=C:\Users\me\.claude`, `Credentials=C:\Users\me\.claude\.credentials.json`, `GlobalConfig=C:\Users\me\.claude.json`, `OAuthRefreshLock=C:\Users\me\.claude\.oauth_refresh.lock`, `LegacyLock=C:\Users\me\.claude.lock`, `StorageWriteLock=C:\Users\me\.claude\.storage-write.lock`, `GlobalConfigLock=C:\Users\me\.claude.json.lock`, `Store=C:\Users\me\AppData\Local\ClaudeMeter\accounts.dat`, `Settings=...\ClaudeMeter\settings.json`.
   - `Blank_config_dir_is_ignored` (Theory `""`, `"   "`): same as default.
   - `Config_dir_moves_everything`: `CLAUDE_CONFIG_DIR=D:\cc`. Expect `ConfigHome=D:\cc`, `GlobalConfig=D:\cc\.claude.json`, `LegacyLock=D:\cc.lock`, `GlobalConfigLock=D:\cc\.claude.json.lock`.
@@ -440,9 +454,9 @@ internal static class JsonSplice
   - `Missing_files_read_as_null`: `LiveFiles.Read` on an empty temp home gives both null; `LiveLogin.From` gives null; `ReadAccessToken` gives null.
   - `Same_as_ignores_other_config_changes`: two configs differing only in `numStartups` with the same `oauthAccount` → `SameAs` true; different `oauthAccount.displayName` → false; different credentials bytes → false.
 
-- [ ] **Step 2: Run, expect FAIL** (types missing).
+- [x] **Step 2: Run, expect FAIL** (types missing).
 
-- [ ] **Step 3: Implement `ClaudePaths.cs`**
+- [x] **Step 3: Implement `ClaudePaths.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -500,7 +514,7 @@ internal sealed record ClaudePaths(
 }
 ```
 
-- [ ] **Step 4: Implement `LoginFiles.cs`**
+- [x] **Step 4: Implement `LoginFiles.cs`**
 
 ```csharp
 using System.Text.Json;
@@ -617,9 +631,9 @@ internal sealed record LiveLogin(byte[] CredentialsJson, CredentialsInfo Credent
 }
 ```
 
-- [ ] **Step 5: Switch the tray to the new reader.** In `TrayApplicationContext` add a field `private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();` and replace the token delegate with `() => LiveFiles.ReadAccessToken(_paths)`. Delete the two old Core files and `CredentialsTests.cs`.
+- [x] **Step 5: Switch the tray to the new reader.** In `TrayApplicationContext` add a field `private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();` and replace the token delegate with `() => LiveFiles.ReadAccessToken(_paths)`. Delete the two old Core files and `CredentialsTests.cs`.
 
-- [ ] **Step 6: Run, expect PASS:** `dotnet build` then `dotnet test`.
+- [x] **Step 6: Run, expect PASS:** `dotnet build` then `dotnet test`.
 
 ### Task 1.3: Atomic writes, DPAPI and the account store
 
@@ -639,7 +653,7 @@ internal sealed record LiveLogin(byte[] CredentialsJson, CredentialsInfo Credent
   - `AccountStore(string path, IDataProtector)`: `Accounts` (AddedAt order), `HasUnsavedChanges`, `Find(AccountKey)`, `FindByCredentials(ReadOnlySpan<byte>)`, `Upsert(StoredAccount)`, `Remove(AccountKey) → bool`, `Load() → StoreLoadResult`, `TrySave() → bool`.
   - Test helpers `ClaudeHome` and `ClaudeJson` (used by Tasks 1.6, 1.7, 2.x).
 
-- [ ] **Step 1: Add test helpers.** `Fakes.cs` gains:
+- [x] **Step 1: Add test helpers.** `Fakes.cs` gains:
 
 ```csharp
 /// <summary>Reversible and visibly not plaintext, so tests can assert nothing is stored in the clear.</summary>
@@ -732,7 +746,7 @@ internal static class ClaudeJson
 }
 ```
 
-- [ ] **Step 2: Write the failing tests.**
+- [x] **Step 2: Write the failing tests.**
   - `AtomicFileTests`:
     - `Creates_a_new_file` and `Replaces_an_existing_file` (content equals the written bytes; no `*.tmp` left in the folder).
     - `Failure_leaves_target_and_no_temp_file`: target set `ReadOnly`; `Write` throws `UnauthorizedAccessException`; target bytes unchanged; `Directory.GetFiles(dir, "*.tmp")` empty.
@@ -746,9 +760,9 @@ internal static class ClaudeJson
     - `Failed_save_keeps_unsaved_flag`: create a directory at `Paths.Store`; `Upsert` then `TrySave()` gives false and `HasUnsavedChanges` stays true.
     - `Dpapi_round_trip` (real `DpapiProtector`): `Unprotect(Protect(x)) == x` and the protected bytes differ from `x`.
 
-- [ ] **Step 3: Run, expect FAIL.**
+- [x] **Step 3: Run, expect FAIL.**
 
-- [ ] **Step 4: Implement `AtomicFile.cs`**
+- [x] **Step 4: Implement `AtomicFile.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -791,7 +805,7 @@ internal static class AtomicFile
 }
 ```
 
-- [ ] **Step 5: Implement `DataProtector.cs`**
+- [x] **Step 5: Implement `DataProtector.cs`**
 
 ```csharp
 using System.Security.Cryptography;
@@ -817,7 +831,7 @@ internal sealed class DpapiProtector : IDataProtector
 }
 ```
 
-- [ ] **Step 6: Implement `AccountStore.cs`**
+- [x] **Step 6: Implement `AccountStore.cs`**
 
 ```csharp
 using System.Security.Cryptography;
@@ -953,7 +967,7 @@ internal sealed class AccountStore(string path, IDataProtector protector)
 }
 ```
 
-- [ ] **Step 7: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~AtomicFileTests|FullyQualifiedName~AccountStoreTests"`.
+- [x] **Step 7: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~AtomicFileTests|FullyQualifiedName~AccountStoreTests"`.
 
 ### Task 1.4: Claude Code's lock directories
 
@@ -972,7 +986,7 @@ internal sealed class AccountStore(string path, IDataProtector protector)
   - `ClaudeLocks(ClaudePaths, DirectoryLocks)`: `AcquireRefreshAsync`, `AcquireStorageWriteAsync`, `AcquireGlobalConfigAsync` (each `→ Task<HeldLocks>`).
   - Tests: `FakeLockFileSystem` (`Log`, `HeldCount`, `AddForeign`, `RemoveForeign`, `Exists`, `AfterCreate`, `BeforeDelete`); `ClaudeHome.Locks` and `ClaudeHome.ClaudeLocks`.
 
-- [ ] **Step 1: Extend the fakes.** Replace `FakeTimeProvider` in `Fakes.cs` (existing tests keep working; they never create timers):
+- [x] **Step 1: Extend the fakes.** Replace `FakeTimeProvider` in `Fakes.cs` (existing tests keep working; they never create timers):
 
 ```csharp
 internal sealed class FakeTimeProvider(DateTimeOffset start) : TimeProvider
@@ -1104,7 +1118,7 @@ public FakeLockFileSystem Locks { get; }
 public ClaudeLocks ClaudeLocks { get; }
 ```
 
-- [ ] **Step 2: Write the failing tests.** `DirectoryLocksTests` (fields: `_clock = new FakeTimeProvider(Start)`, `_fs = new FakeLockFileSystem(_clock)`, `_locks = new DirectoryLocks(_fs, _clock, (d, _) => { _clock.Advance(d); return Task.CompletedTask; })`, `A = new LockSpec(@"C:\h\.claude\.oauth_refresh.lock", 60s)`, `B = new LockSpec(@"C:\h\.claude.lock", 60s)`):
+- [x] **Step 2: Write the failing tests.** `DirectoryLocksTests` (fields: `_clock = new FakeTimeProvider(Start)`, `_fs = new FakeLockFileSystem(_clock)`, `_locks = new DirectoryLocks(_fs, _clock, (d, _) => { _clock.Advance(d); return Task.CompletedTask; })`, `A = new LockSpec(@"C:\h\.claude\.oauth_refresh.lock", 60s)`, `B = new LockSpec(@"C:\h\.claude.lock", 60s)`):
 
 ```csharp
 [Fact]
@@ -1197,9 +1211,9 @@ public async Task Busy_second_lock_releases_the_first_and_retries()
   - `Create_fails_when_the_directory_exists`: first `TryCreateDirectory` true, second false.
   - `Owner_record_is_never_touched`: create `<tmp>\.claude`, write `<tmp>\.claude\.oauth_refresh.lock.owner` with `{"pid":1}` and set its mtime to an hour ago; create a stale `<tmp>\.claude\.oauth_refresh.lock` (mtime 2 minutes ago). With real `LockFileSystem`, `TimeProvider.System`, `Task.Delay`: `ClaudeLocks.AcquireRefreshAsync` then dispose. Owner file bytes and `LastWriteTimeUtc` are unchanged; both lock directories are gone.
 
-- [ ] **Step 3: Run, expect FAIL.**
+- [x] **Step 3: Run, expect FAIL.**
 
-- [ ] **Step 4: Implement `DirectoryLocks.cs`**
+- [x] **Step 4: Implement `DirectoryLocks.cs`**
 
 ```csharp
 using System.Runtime.InteropServices;
@@ -1405,7 +1419,7 @@ internal sealed class ClaudeLocks(ClaudePaths paths, DirectoryLocks locks)
 }
 ```
 
-- [ ] **Step 5: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~DirectoryLocksTests|FullyQualifiedName~LockFileSystemTests"`.
+- [x] **Step 5: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~DirectoryLocksTests|FullyQualifiedName~LockFileSystemTests"`.
 
 ### Task 1.5: Profile client and capture verification
 
@@ -1423,7 +1437,7 @@ internal sealed class ClaudeLocks(ClaudePaths paths, DirectoryLocks locks)
   - `enum CaptureVerdict { Accept, Defer, Reject }`, `record CaptureDecision(CaptureVerdict Verdict, string? Reason)`, `CaptureVerifier.Evaluate(LiveLogin, IReadOnlyList<StoredAccount>, ProfileResult) → CaptureDecision`.
   - Test fake `FakeProfileClient` (`Result`, `Calls`, `OnCall` hook used to assert no locks are held).
 
-- [ ] **Step 1: Add the fake**
+- [x] **Step 1: Add the fake**
 
 ```csharp
 internal sealed class FakeProfileClient : IProfileClient
@@ -1441,7 +1455,7 @@ internal sealed class FakeProfileClient : IProfileClient
 }
 ```
 
-- [ ] **Step 2: Write the failing tests.**
+- [x] **Step 2: Write the failing tests.**
   - `ProfileParserTests`: `{"account":{"uuid":"a","email":"x"},"organization":{"uuid":"o"}}` → `Found("a","o")`; without `organization` → `Found("a", null)`; without `account.uuid` → `Unavailable`; `[]` and `not json` → `Unavailable`.
   - `CaptureVerifierTests` (live login for A built with `ClaudeJson`; stored accounts via `StoredAccount.Create`):
     - `Verified_new_login_is_accepted`: profile `Found("acc-a","org-a")`, empty store → Accept.
@@ -1456,9 +1470,9 @@ internal sealed class FakeProfileClient : IProfileClient
     - `Missing_refresh_token_is_rejected`.
     - `Profile_check_skips_the_request_for_an_expired_token`: `ProfileCheck.RunAsync` with `ExpiresAt` in the past → `Unavailable("token expired")`, `Calls` empty.
 
-- [ ] **Step 3: Run, expect FAIL.**
+- [x] **Step 3: Run, expect FAIL.**
 
-- [ ] **Step 4: Implement `ProfileClient.cs`**
+- [x] **Step 4: Implement `ProfileClient.cs`**
 
 ```csharp
 using System.Net;
@@ -1553,7 +1567,7 @@ internal static class ProfileCheck
 }
 ```
 
-- [ ] **Step 5: Implement `CaptureVerifier.cs`**
+- [x] **Step 5: Implement `CaptureVerifier.cs`**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -1598,7 +1612,7 @@ internal static class CaptureVerifier
 }
 ```
 
-- [ ] **Step 6: Run, expect PASS.**
+- [x] **Step 6: Run, expect PASS.**
 
 ### Task 1.6: Auto-save
 
@@ -1610,7 +1624,7 @@ internal static class CaptureVerifier
 - Consumes: `ClaudePaths`, `ClaudeLocks`, `AccountStore`, `IProfileClient`, `ProfileCheck`, `CaptureVerifier`, `LiveFiles`, `LiveLogin`.
 - Produces: `abstract record AutoSaveResult` with `NoLogin`, `Unchanged`, `Inserted(string Email)`, `Updated`, `Deferred(string Email)`, `Rejected(string Reason)`, `Busy`; `AutoSaver(ClaudePaths, ClaudeLocks, AccountStore, IProfileClient, TimeProvider)` with `RequireProfile { get; set; }` and `RunAsync(CancellationToken) → Task<AutoSaveResult>`.
 
-- [ ] **Step 1: Write the failing tests** (fixture: `_home = new ClaudeHome()`, `_profiles = new FakeProfileClient { OnCall = () => Assert.Equal(0, _home.Locks.HeldCount) }`, `_saver = new AutoSaver(_home.Paths, _home.ClaudeLocks, _home.Store, _profiles, _home.Clock)`):
+- [x] **Step 1: Write the failing tests** (fixture: `_home = new ClaudeHome()`, `_profiles = new FakeProfileClient { OnCall = () => Assert.Equal(0, _home.Locks.HeldCount) }`, `_saver = new AutoSaver(_home.Paths, _home.ClaudeLocks, _home.Store, _profiles, _home.Clock)`):
 
 ```csharp
 [Fact]
@@ -1648,9 +1662,9 @@ public async Task New_verified_login_is_inserted()
   - `No_login_writes_nothing`: credentials file missing → `NoLogin`; same when `oauthAccount` is absent.
   - `Duplicate_oauth_account_is_rejected`: config with two `oauthAccount` keys → `Rejected`.
 
-- [ ] **Step 2: Run, expect FAIL.**
+- [x] **Step 2: Run, expect FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -1742,7 +1756,7 @@ internal sealed class AutoSaver(ClaudePaths paths, ClaudeLocks locks, AccountSto
 }
 ```
 
-- [ ] **Step 4: Run, expect PASS.**
+- [x] **Step 4: Run, expect PASS.**
 
 ### Task 1.7: Switch transaction
 
@@ -1759,7 +1773,7 @@ internal sealed class AutoSaver(ClaudePaths paths, ClaudeLocks locks, AccountSto
   - `abstract record SwitchResult` with `Switched(string Email)`, `Unconfirmed(string Email)`, `Failed(string Message)`.
   - `AccountSwitcher(ClaudePaths, ClaudeLocks, AccountStore, IProfileClient, ITokenRefresher, TimeProvider)`: `SwitchAsync(AccountKey target, IProgress<SwitchStage>? progress, CancellationToken) → Task<SwitchResult>`; message constants `Busy`, `Changing`, `Unverified`, `NoLogin`, `TargetExpired`, `AlreadyActive`.
 
-- [ ] **Step 1: Add the fake**
+- [x] **Step 1: Add the fake**
 
 ```csharp
 internal sealed class FakeTokenRefresher : ITokenRefresher
@@ -1775,7 +1789,7 @@ internal sealed class FakeTokenRefresher : ITokenRefresher
 }
 ```
 
-- [ ] **Step 2: Write the failing tests.** Fixture: `_home`, `_profiles` (with the no-lock `OnCall` assert), `_refresher = new FakeTokenRefresher()`, `_switcher = new AccountSwitcher(_home.Paths, _home.ClaudeLocks, _home.Store, _profiles, _refresher, _home.Clock)`. Helper `Arrange()` stores A (old credentials `a-refresh-1`, added day −2) and T (`t-refresh`, added day −1), writes live A rotated (`a-refresh-2`) with `ClaudeJson.GlobalConfig("acc-a","org-a","a@example.com")`, sets `_profiles.Result = Found("acc-a","org-a")`, and returns `(t, liveA, configBefore)`.
+- [x] **Step 2: Write the failing tests.** Fixture: `_home`, `_profiles` (with the no-lock `OnCall` assert), `_refresher = new FakeTokenRefresher()`, `_switcher = new AccountSwitcher(_home.Paths, _home.ClaudeLocks, _home.Store, _profiles, _refresher, _home.Clock)`. Helper `Arrange()` stores A (old credentials `a-refresh-1`, added day −2) and T (`t-refresh`, added day −1), writes live A rotated (`a-refresh-2`) with `ClaudeJson.GlobalConfig("acc-a","org-a","a@example.com")`, sets `_profiles.Result = Found("acc-a","org-a")`, and returns `(t, liveA, configBefore)`.
 
 ```csharp
 [Fact]
@@ -1832,9 +1846,9 @@ public async Task Busy_config_lock_restores_the_previous_credentials()
   - `Switch_without_signed_in_claude_code_is_refused`: credentials file deleted → `Failed(NoLogin)`; nothing written.
   - `Switch_to_the_active_account_is_refused`: target = A → `Failed(AlreadyActive)`.
 
-- [ ] **Step 3: Run, expect FAIL.**
+- [x] **Step 3: Run, expect FAIL.**
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```csharp
 namespace ClaudeMeter.Core;
@@ -2009,7 +2023,7 @@ internal sealed class AccountSwitcher(ClaudePaths paths, ClaudeLocks locks, Acco
 
 Note on the outer `IOException` catch: it covers only failures before or at step 5 (atomic, so nothing changed). Steps 6–7 handle their own failures.
 
-- [ ] **Step 5: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~AccountSwitcherTests"`.
+- [x] **Step 5: Run, expect PASS:** `dotnet test --filter "FullyQualifiedName~AccountSwitcherTests"`.
 
 ### Task 1.8: Wire auto-save into the app, then commit Phase 1
 
@@ -2017,7 +2031,7 @@ Note on the outer `IOException` catch: it covers only failures before or at step
 - Create: `src/ClaudeMeter/UI/ClaudeFilesWatcher.cs`
 - Modify: `src/ClaudeMeter/UI/TrayApplicationContext.cs`
 
-- [ ] **Step 1: Watcher**
+- [x] **Step 1: Watcher**
 
 ```csharp
 using ClaudeMeter.Core;
@@ -2073,7 +2087,7 @@ internal sealed class ClaudeFilesWatcher : IDisposable
 }
 ```
 
-- [ ] **Step 2: TrayApplicationContext.** Add fields `_store = new AccountStore(_paths.Store, new DpapiProtector())`, `_profiles = new ProfileClient()`, `_autoSaver`, `_watcher`, `bool _autoSaving`. In the constructor: `_store.Load()` (on `SetAside`, `ShowBalloonTip` "Saved accounts couldn't be read" with the Notifications body from item 12); `_autoSaver = new AutoSaver(_paths, ClaudeLocks.ForSystem(_paths), _store, _profiles, TimeProvider.System)`; `_watcher = new ClaudeFilesWatcher(_paths)` with `Changed += async (_, _) => await AutoSaveAsync()`. In `OnTimerTick` call `await AutoSaveAsync()` before `RefreshAsync`. Dispose `_watcher` and `_profiles`.
+- [x] **Step 2: TrayApplicationContext.** Add fields `_store = new AccountStore(_paths.Store, new DpapiProtector())`, `_profiles = new ProfileClient()`, `_autoSaver`, `_watcher`, `bool _autoSaving`. In the constructor: `_store.Load()` (on `SetAside`, `ShowBalloonTip` "Saved accounts couldn't be read" with the Notifications body from item 12); `_autoSaver = new AutoSaver(_paths, ClaudeLocks.ForSystem(_paths), _store, _profiles, TimeProvider.System)`; `_watcher = new ClaudeFilesWatcher(_paths)` with `Changed += async (_, _) => await AutoSaveAsync()`. In `OnTimerTick` call `await AutoSaveAsync()` before `RefreshAsync`. Dispose `_watcher` and `_profiles`.
 
 ```csharp
 private async Task AutoSaveAsync()
@@ -2093,9 +2107,9 @@ private async Task AutoSaveAsync()
 }
 ```
 
-- [ ] **Step 3: Verify.** `dotnet build`; `dotnet test` (all green). Run the app (`dotnet run --project src/ClaudeMeter`); within a minute a toast "Added <your email>" appears and `%LOCALAPPDATA%\ClaudeMeter\accounts.dat` exists and does not contain your email in plain text (`Select-String -Path "$env:LOCALAPPDATA\ClaudeMeter\accounts.dat" -Pattern '@' -SimpleMatch` finds nothing). The tray icon still shows usage.
+- [x] **Step 3: Verify.** `dotnet build`; `dotnet test` (all green). Run the app (`dotnet run --project src/ClaudeMeter`); within a minute a toast "Added <your email>" appears and `%LOCALAPPDATA%\ClaudeMeter\accounts.dat` exists and does not contain your email in plain text (`Select-String -Path "$env:LOCALAPPDATA\ClaudeMeter\accounts.dat" -Pattern '@' -SimpleMatch` finds nothing). The tray icon still shows usage.
 
-- [ ] **Step 4: Commit Phase 1**
+- [x] **Step 4: Commit Phase 1**
 
 ```powershell
 git add docs/MULTI-ACCOUNT-SPEC.md docs/MULTI-ACCOUNT-PLAN.md src tests

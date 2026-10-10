@@ -38,6 +38,8 @@ Visual reference: the approved mockup (private artifact) at https://claude.ai/ar
   - Under the lock, Claude Code re-reads the credentials file; if it finds a different, non-expired credential, it skips its own refresh and uses that credential (consistent with the 2.1.296 code).
   - Token endpoint: `POST https://platform.claude.com/v1/oauth/token`, JSON body `grant_type=refresh_token`, `refresh_token`, `client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e`. Refresh tokens rotate (a used refresh token is spent).
   - Profile endpoint: `GET https://api.anthropic.com/api/oauth/profile` with the bearer token returns `account.uuid`, `account.email`, `organization.uuid`. It must not be called while holding any lock.
+- Profile schema confirmed on 2026-10-11 (with `anthropic-beta: oauth-2025-04-20`): top-level `account`, `organization`, `application`, `enabled_plugins`; `account.uuid`, `account.email` and `organization.uuid` are present.
+- Login-expiry baseline on 2026-10-11: `expiresAt` 2026-10-11 04:01:58Z, `refreshTokenExpiresAt` 2026-10-24 01:03:01Z. Compare after Claude Code's next refresh (see Open items).
 
 ## Key decisions
 - **Identity is the pair (`accountUuid`, `organizationUuid`)** from `oauthAccount`. One person can have several organizations (for example Pro plus a Team seat), each with its own token and limits.
@@ -78,6 +80,7 @@ Resolve once via a `ClaudePaths` type (replaces `CredentialsLocator`):
   - `LoginState` (valid / expired by `invalid_grant`)
   - `ExpiryWarnedFor` (the `refreshTokenExpiresAt` value already warned about, so a new login re-arms the warning)
 - Usage data is not secret but lives in the same file for simplicity.
+- If the file cannot be decrypted or parsed (another Windows user, corruption, a newer format), rename it to `accounts.dat.unreadable-<UTC timestamp>`, start with an empty store, and show one toast. Never overwrite it.
 
 ## Locking (cooperate with Claude Code)
 Claude Code uses npm `proper-lockfile`: a lock is a **directory**, and `mkdir` atomicity is the mutex.
@@ -105,7 +108,9 @@ Before any live credentials are attributed to an account (auto-save, switch):
 1. `organizationUuid` at the top level of `.credentials.json` must equal `oauthAccount.organizationUuid` (skip if the credentials file has no such field).
 2. The live `refreshToken` must not equal the `refreshToken` of any *other* stored account.
 3. Profile check, **outside all locks**: if the live access token is not expired, call the profile endpoint; `account.uuid` must equal `oauthAccount.accountUuid` and `organization.uuid` (when present) must equal `oauthAccount.organizationUuid`.
-4. Under both OAuth refresh locks and the storage-write lock, re-read both files. They must be byte-identical to what was verified; otherwise abort and retry later.
+4. Under both OAuth refresh locks and the storage-write lock, re-read both files. The credentials file and the `oauthAccount` value must be byte-identical to what was verified; otherwise abort and retry later. The rest of the global config is not compared, because Claude Code rewrites it constantly.
+
+**Byte-match rule:** live credentials that are byte-identical to a stored snapshot need no capture and no profile check. If that snapshot belongs to the identity in `oauthAccount`, only a changed `oauthAccount` value is saved; if it belongs to another account, nothing is captured.
 
 If the profile check cannot run (expired token, offline, 401, schema without `account.uuid`), treat the capture as unverified:
 - Auto-save of a **new** account waits for the next attempt.
@@ -121,14 +126,14 @@ Any failed check: write nothing, show "Login files are changing; will retry" in 
 
 ## Switch transaction
 One click on **Switch** for account T, while account A is active. T is in the store and its login is not expired.
-1. Outside locks: if T's access token is expired or within 5 minutes of `expiresAt`, refresh T first (the app still owns T). `invalid_grant` marks T as login expired and aborts. Then run the profile check (Capture verification step 3) on A's live credentials.
+1. Outside locks: if T's access token is expired or within 5 minutes of `expiresAt`, refresh T first (the app still owns T), but only when background refresh is allowed (toggle on, not globally disabled); otherwise Claude Code refreshes T itself after the switch. `invalid_grant` marks T as login expired and aborts. If Claude Code has no signed-in account (a file or `oauthAccount` missing), abort with "Claude Code has no signed-in account. Run /login in Claude Code first." Then run the profile check (Capture verification step 3) on A's live credentials, unless the byte-match rule applies.
 2. Acquire both OAuth refresh locks, then the storage-write lock.
-3. Re-read the live credentials and the active identity, and attribute them to A (Capture verification). If A is stored, update its `CredentialsJson`. If A is not stored, it must have passed the profile check in step 1 with byte-identical content, and is inserted. Otherwise abort with "Current account isn't saved yet (couldn't verify it). Check your connection and try again."
+3. Re-read the live credentials and the active identity; they must match step 1 (Capture verification step 4). If the byte-match rule applies, nothing is captured. Otherwise attribute them to A (Capture verification): update A's `CredentialsJson` if A is stored, or insert A if it passed the profile check in step 1; otherwise abort with "Current account isn't saved yet (couldn't verify it). Check your connection and try again." **Save the store now**: A's snapshot must be on disk before its only live copy is overwritten. If this save fails, abort with nothing changed.
 4. Keep the current `.credentials.json` content in memory for rollback (never a plaintext copy on disk).
 5. Write T's `CredentialsJson` to `.credentials.json` atomically. Keep the storage-write lock until step 7 is settled, so a rollback write is covered too.
 6. Acquire the config lock. Re-read the global config, splice T's `OAuthAccountJson` over `oauthAccount`, write atomically. Release the config lock.
-7. If step 6 fails, restore the in-memory content to `.credentials.json` and report the error.
-8. Save the store (A's refreshed snapshot, `LastActiveAt` updates). Release the storage-write lock, then both OAuth refresh locks.
+7. If step 6 fails, restore the in-memory content to `.credentials.json` and report the error. If the restore also fails, report "Couldn't finish the switch or undo it. Switch to <A> again from the panel." (A is stored, so the byte-match rule lets that switch repair the files.)
+8. Save the store (`LastActiveAt` updates). Release the storage-write lock, then both OAuth refresh locks.
 9. Post-check: re-read both files and confirm they now hold T. On mismatch, show a warning toast and do not capture anything until the next verified capture.
 10. Toast: "Switched to <email>. Reopen Claude Code to use it. Running sessions may move to this account at their next token refresh."
 11. Trigger an immediate usage fetch for all accounts.
@@ -149,15 +154,16 @@ From step 5 on, Claude Code owns T and the app owns A.
 - If the save fails: keep the new token in memory, retry the save on every poll, show a warning, and send no further refresh for that account until the save succeeds.
 - Errors:
   - `invalid_grant`: the login is dead. Mark it expired; stop refreshing and polling it.
-  - `invalid_client`: the client is rejected. Disable refresh for all accounts, toast once "Background refresh stopped", fall back to last-known usage.
+  - `invalid_client`: the client is rejected. Disable refresh for all accounts until the app restarts, toast once "Background refresh stopped", fall back to last-known usage.
   - 429, 5xx, network: transient, back off with the existing `RefreshPolicy` rules.
+- Known risk: if a refresh response is lost after the server already rotated the refresh token (for example a timeout), that refresh token is spent and the account needs `/login` again.
 
 ## Usage per account
 - One `UsageService` + `RefreshPolicy` per account (rate limits are per token). 10-minute poll, 5-minute manual floor, 429 backoff. One shared timer schedules the earliest due poll.
 - **Active account**: unchanged behavior. Token read fresh from `.credentials.json` on every poll. Never refreshed by the app.
 - **Inactive accounts**: stored access token, refreshed as above. A 401 triggers one refresh and one retry.
 - **Without refresh** (toggle off or globally disabled): poll inactive accounts only until `expiresAt` or a 401, then show last known usage with its age.
-- **Reset inference**: for any window whose `resets_at` is in the past while data is not live, show `≈0%` with "reset" in place of the time.
+- **Reset inference**: for any window whose `resets_at` is in the past and later than the time its data was fetched, show `≈0%` with "reset" in place of the time (this also covers live data fetched shortly before a reset).
 - **After a switch**, if the new active account returns 401: show the existing "token expired, open Claude Code" state, plus "If Claude Code asks you to log in, run `/login` with this account."
 - "Refresh" in the header refreshes every pollable account, each subject to its own manual floor.
 
@@ -191,12 +197,14 @@ Follow the approved mockup. Windows 11 native look, performance first.
 - Link: "Open claude.ai usage page".
 - Footer: version and Exit.
 
-**Notifications** (balloon tips, shown as Windows toasts)
-- Switched to <email> (text in Switch step 10).
-- Added <email> to Claude Meter.
-- <email>: login expires in N days.
-- Couldn't switch accounts: <reason>.
-- Background refresh stopped.
+**Notifications** (balloon tips, shown as Windows toasts; title and body as in the mockup)
+- "Switched to <email>" / "Reopen Claude Code to use it. Running sessions may move to this account at their next token refresh."
+- "Added <email>" / "Claude Meter saved this login. Switch accounts from the tray panel."
+- "<email>: login expires in N days" / "Switch to it and run /login in Claude Code to renew."
+- "Couldn't switch accounts" / <reason>
+- "Background refresh stopped" / "Anthropic rejected the token refresh. Inactive accounts now show last known usage."
+- "Switch not confirmed" / "Claude Code's login files don't show <email>. Claude Meter saves no logins until it can verify one." (Switch step 9)
+- "Saved accounts couldn't be read" / "Claude Meter kept the old file and starts fresh. Accounts are saved again as you use them." (Account store)
 
 **Visual system**
 - Backdrop: DWM acrylic (`DWMWA_SYSTEMBACKDROP_TYPE` = transient window) with dark-mode attribute set per theme; solid fallback when transparency effects are off or the backdrop is unavailable. Prove it on a borderless popup in a prototype before building the panel.
@@ -255,6 +263,7 @@ Add a short "Multiple accounts" section: add accounts by running `/login` in Cla
 Also update `docs/SPEC.md`'s Security section so it no longer contradicts this spec.
 
 ## Open items
-- Observe `refreshTokenExpiresAt` before and after Claude Code's next token refresh to confirm a refresh does not change it.
-- Phase 1, first step: call the profile endpoint once and print only its key names to confirm the schema.
-- Phase 3, first step: acrylic backdrop on a borderless, non-activating popup.
+- Observe `refreshTokenExpiresAt` before and after Claude Code's next token refresh to confirm a refresh does not change it (baseline recorded in Spike findings).
+- ~~Phase 1, first step: call the profile endpoint once and print only its key names to confirm the schema.~~ Done 2026-10-11, see Spike findings.
+- Phase 3, first step: acrylic backdrop on a borderless, non-activating popup. Windows draws system backdrops in full only for active windows, and this panel never activates; test a `WM_NCACTIVATE` override, and draw text with GDI+ (GDI text has no alpha on a composited surface). If acrylic still fails, ask before choosing between the solid fallback and the undocumented `SetWindowCompositionAttribute`.
+- Observe whether a Claude Code session that was open during a switch later writes its cached `oauthAccount` back into the global config. Checks 1 and 2 already stop a wrong capture in that case.

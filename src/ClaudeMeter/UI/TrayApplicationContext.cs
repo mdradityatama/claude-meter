@@ -16,7 +16,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private static readonly MethodInfo? ShowContextMenuMethod =
         typeof(NotifyIcon).GetMethod("ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
 
+    private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();
     private readonly UsageClient _client = new();
+    private readonly ProfileClient _profiles = new();
+    private readonly AccountStore _store;
+    private readonly AutoSaver _autoSaver;
     private readonly UsageService _service;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu = new();
@@ -30,12 +34,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private long? _leftAt;
     private Point _lastHoverPoint;
     private Icon? _icon;
+    private ClaudeFilesWatcher? _watcher;
+    private bool _autoSaving;
 
     public TrayApplicationContext()
     {
+        _store = new AccountStore(_paths.Store, new DpapiProtector());
+        var loaded = _store.Load();
+        _autoSaver = new AutoSaver(_paths, ClaudeLocks.ForSystem(_paths), _store, _profiles, TimeProvider.System);
+
         _service = new UsageService(
             _client,
-            () => CredentialsReader.ReadAccessToken(CredentialsLocator.ResolvePath(Environment.GetEnvironmentVariable)),
+            () => LiveFiles.ReadAccessToken(_paths),
             new RefreshPolicy(TimeProvider.System));
 
         _startWithWindowsItem = new ToolStripMenuItem("Start with Windows", null, OnStartWithWindowsClick) { CheckOnClick = true };
@@ -61,6 +71,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         UpdateTray();
+        if (loaded == StoreLoadResult.SetAside)
+            _notifyIcon.ShowBalloonTip(5000, "Saved accounts couldn't be read", "Claude Meter kept the old file and starts fresh. Accounts are saved again as you use them.", ToolTipIcon.None);
+
+        _watcher = new ClaudeFilesWatcher(_paths);
+        _watcher.Changed += async (_, _) => await AutoSaveAsync();
 
         // First poll runs once the message loop is up.
         _timer.Tick += OnTimerTick;
@@ -71,9 +86,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private async void OnTimerTick(object? sender, EventArgs e)
     {
         _timer.Stop();
+        await AutoSaveAsync();
         await _service.RefreshAsync(manual: false);
         UpdateTray();
         ScheduleNextPoll();
+    }
+
+    private async Task AutoSaveAsync()
+    {
+        if (_autoSaving)
+            return;
+        _autoSaving = true;
+        try
+        {
+            if (await _autoSaver.RunAsync(CancellationToken.None) is AutoSaveResult.Inserted inserted)
+                _notifyIcon.ShowBalloonTip(5000, $"Added {inserted.Email}", "Claude Meter saved this login. Switch accounts from the tray panel.", ToolTipIcon.None);
+        }
+        finally
+        {
+            _autoSaving = false;
+        }
     }
 
     private async void OnRefreshClick(object? sender, EventArgs e)
@@ -202,7 +234,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _notifyIcon.Dispose();
             _menu.Dispose();
             _icon?.Dispose();
+            _watcher?.Dispose();
             _client.Dispose();
+            _profiles.Dispose();
         }
 
         base.Dispose(disposing);
