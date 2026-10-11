@@ -26,6 +26,17 @@ public class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void Unreadable_file_falls_back_to_the_default()
+    {
+        // Reading a directory as a file throws UnauthorizedAccessException, like a file without read access.
+        Directory.CreateDirectory(Path);
+
+        var settings = AppSettings.Load(Path);
+        Assert.True(settings.KeepInactiveLive);
+        Assert.False(settings.ShowResetDate);
+    }
+
+    [Fact]
     public void Setting_is_saved_and_reloaded()
     {
         Assert.True(AppSettings.Load(Path).SetKeepInactiveLive(false));

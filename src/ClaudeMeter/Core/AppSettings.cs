@@ -28,7 +28,7 @@ internal sealed class AppSettings
             var file = LiveFiles.ReadOrNull(path) is { } bytes ? JsonSerializer.Deserialize<SettingsFile>(bytes, Options) : null;
             return new AppSettings(path, file?.KeepInactiveLive ?? true, file?.ShowResetDate ?? false);
         }
-        catch (Exception ex) when (ex is JsonException or IOException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return new AppSettings(path, keepInactiveLive: true, showResetDate: false);
         }
