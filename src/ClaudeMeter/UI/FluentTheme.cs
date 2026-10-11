@@ -57,8 +57,8 @@ internal sealed record FluentTheme(
                 ButtonHover: Mix(white, 0.04, buttonFill),
                 ButtonPressed: Mix(black, 0.06, buttonFill),
                 ButtonBorder: Mix(white, 0.10, bg),
-                SubtleHover: Mix(white, 0.06, bg),
-                SubtlePressed: Mix(white, 0.04, bg),
+                SubtleHover: Subtle(dark: true, bg, pressed: false),
+                SubtlePressed: Subtle(dark: true, bg, pressed: true),
                 Ok: Color.FromArgb(0x6C, 0xCB, 0x5F),
                 Caution: Color.FromArgb(0xFC, 0xE1, 0x00),
                 Critical: Color.FromArgb(0xFF, 0x99, 0xA4),
@@ -86,8 +86,8 @@ internal sealed record FluentTheme(
                 ButtonHover: Mix(black, 0.03, buttonFill),
                 ButtonPressed: Mix(black, 0.06, buttonFill),
                 ButtonBorder: Mix(black, 0.10, bg),
-                SubtleHover: Mix(black, 0.04, bg),
-                SubtlePressed: Mix(black, 0.02, bg),
+                SubtleHover: Subtle(dark: false, bg, pressed: false),
+                SubtlePressed: Subtle(dark: false, bg, pressed: true),
                 Ok: Color.FromArgb(0x0F, 0x7B, 0x0F),
                 Caution: Color.FromArgb(0x9D, 0x5D, 0x00),
                 Critical: Color.FromArgb(0xC4, 0x2B, 0x1C),
@@ -118,7 +118,9 @@ internal sealed record FluentTheme(
     /// <see cref="SubtleHover"/> or <see cref="SubtlePressed"/> over <paramref name="under"/> instead of the panel
     /// color, for controls drawn on a row fill.
     /// </summary>
-    public Color SubtleOver(Color under, bool pressed) => Dark
+    public Color SubtleOver(Color under, bool pressed) => Subtle(Dark, under, pressed);
+
+    private static Color Subtle(bool dark, Color under, bool pressed) => dark
         ? Mix(Color.White, pressed ? 0.04 : 0.06, under)
         : Mix(Color.Black, pressed ? 0.02 : 0.04, under);
 
