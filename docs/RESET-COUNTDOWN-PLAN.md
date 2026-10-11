@@ -19,9 +19,9 @@
 | 2. Setting | done | 7abd2b0 |
 | 3. UI | done (manual tray check pending) | 605b2d3 |
 | 4. Docs | done | (this commit) |
-| 5. Review and merge | pending | |
+| 5. Review and merge | review done, fixes committed; smoke run and merge pending | (this commit) |
 
-**Next step:** Step 5, code review, then merge.
+**Next step:** Step 5, smoke run of the real app (the user closes their running instance), then merge.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -33,6 +33,13 @@
 - 2026-10-11: Step 3: Ruling: the column samples come from `DisplayFormatter.ResetColumnSamples`, so the formats live in one place — cost if wrong: none.
 - 2026-10-11: Step 3: complete, full suite 268/268. Verified by screenshots of the real `MeterPanel` in a scratch harness (dark and light, both views, hover on active and inactive rows, en-ID and de-DE) and simulated clicks (meters toggle, status line does nothing, Switch still switches). Not verified: 125% DPI and a run of the real app, because the user's own instance holds the single-instance mutex.
 - 2026-10-11: Step 4: complete (README intro and features line; spec panel row and settings file).
+- 2026-10-11: Step 5: Code review found 12 items; 4 fixed, 8 left as they are. Full suite 270/270, Release build 0 warnings.
+- 2026-10-11: Step 5: Fixed: the reset column samples day 28 of each month in the culture's own calendar. On fa-IR (Persian) and ar-SA (Hijri), Gregorian day 28 gave one-digit days, so the column was measured too narrow and real dates were cut off.
+- 2026-10-11: Step 5: Fixed: `AppSettings.Load` also falls back to the defaults on `UnauthorizedAccessException`. Before, an unreadable `settings.json` stopped the app at startup. This bug was older than this branch.
+- 2026-10-11: Step 5: Fixed: the panel measures the reset column again when `CultureInfo.CurrentCulture` is a different object, so the width and the month names always come from the same culture.
+- 2026-10-11: Step 5: Fixed: `SubtleHover`, `SubtlePressed` and `SubtleOver` share one tint function, so the meter hover cannot drift from the other controls.
+- 2026-10-11: Step 5: Correction to the step 3 ruling: the countdown timer fires once per distinct sub-minute phase of the resets, so up to 2 repaints a minute per account, not 1. Kept: the timer runs only while the panel is visible, and each repaint is cheap.
+- 2026-10-11: Step 5: Kept as is: a past reset that is not inferred shows "<1m" until the next poll (the server has not reset yet, so the reset is imminent); the toggle saves synchronously like the other toggles; the settings view's login date stays invariant (agreed decision: other times do not change); the time strings stay in `BarModel` so Core keeps the formatting testable; the shared `AppSettings` keeps two owners (the runtime needs KeepInactiveLive, only the tray needs ShowResetDate); `ResetDate` and `FormatTime` stay separate; the hover fill keeps 8 px from both card edges.
 
 ---
 
