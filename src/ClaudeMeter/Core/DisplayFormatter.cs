@@ -183,8 +183,16 @@ internal static class DisplayFormatter
     {
         yield return Countdown(new TimeSpan(6, 23, 0, 0));
         yield return Countdown(new TimeSpan(23, 59, 0));
-        for (var month = 1; month <= 12; month++)
-            yield return ResetDate(new DateTimeOffset(2026, month, 28, 23, 59, 0, TimeSpan.Zero), TimeZoneInfo.Utc, DateTimeOffset.MinValue, culture);
+
+        // Dates format in the culture's own calendar (Persian on fa-IR, Hijri on ar-SA), so the samples take day 28
+        // of each of its months; every calendar's months have at least 28 days.
+        var calendar = culture.DateTimeFormat.Calendar;
+        var year = calendar.GetYear(new DateTime(2026, 1, 1));
+        for (var month = 1; month <= calendar.GetMonthsInYear(year); month++)
+        {
+            var date = calendar.ToDateTime(year, month, 28, 23, 59, 0, 0);
+            yield return ResetDate(new DateTimeOffset(date, TimeSpan.Zero), TimeZoneInfo.Utc, DateTimeOffset.MinValue, culture);
+        }
     }
 
     /// <summary>

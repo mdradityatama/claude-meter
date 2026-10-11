@@ -114,6 +114,16 @@ public class DisplayFormatterTests
     }
 
     [Fact]
+    public void Reset_column_samples_use_the_culture_calendar_for_two_digit_days()
+    {
+        var persian = CultureInfo.GetCultureInfo("fa-IR");
+        var samples = DisplayFormatter.ResetColumnSamples(persian).ToList();
+
+        Assert.Equal(12, samples.Count(text => text.StartsWith("28 ", StringComparison.Ordinal)));
+        Assert.Contains("28 اردیبهشت 23:59", samples);
+    }
+
+    [Fact]
     public void Next_countdown_change_is_the_nearest_minute_step_of_a_reset_ahead()
     {
         DateTimeOffset?[] resets = [Now.AddHours(4).AddMinutes(12).AddSeconds(30), Now.AddDays(2).AddSeconds(10), null, Now.AddMinutes(-1)];
