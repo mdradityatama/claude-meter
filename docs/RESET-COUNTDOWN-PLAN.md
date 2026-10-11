@@ -17,11 +17,11 @@
 | 0. Branch and plan in repo | done | e6f9571 |
 | 1. Core formatting | done | 9865cd6 |
 | 2. Setting | done | 7abd2b0 |
-| 3. UI | done (manual tray check pending) | (this commit) |
-| 4. Docs | pending | |
+| 3. UI | done (manual tray check pending) | 605b2d3 |
+| 4. Docs | done | (this commit) |
 | 5. Review and merge | pending | |
 
-**Next step:** Step 4, docs.
+**Next step:** Step 5, code review, then merge.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -32,6 +32,7 @@
 - 2026-10-11: Step 3: Ruling: the countdown timer aims at the next minute step of the nearest reset (`DisplayFormatter.UntilCountdownChanges`, at most a minute) instead of the wall-clock minute, because `resets_at` carries seconds (e.g. `17:20:00.089`) and a wall-clock tick would show a stale minute — cost if wrong: none, at most one extra repaint a minute.
 - 2026-10-11: Step 3: Ruling: the column samples come from `DisplayFormatter.ResetColumnSamples`, so the formats live in one place — cost if wrong: none.
 - 2026-10-11: Step 3: complete, full suite 268/268. Verified by screenshots of the real `MeterPanel` in a scratch harness (dark and light, both views, hover on active and inactive rows, en-ID and de-DE) and simulated clicks (meters toggle, status line does nothing, Switch still switches). Not verified: 125% DPI and a run of the real app, because the user's own instance holds the single-instance mutex.
+- 2026-10-11: Step 4: complete (README intro and features line; spec panel row and settings file).
 
 ---
 
@@ -71,7 +72,7 @@
   - `FluentTheme.cs`: blend the hover / pressed tint onto a given color.
   - `TrayApplicationContext.cs`: keep `AppSettings` in a field; pass `CultureInfo.CurrentCulture` and `ShowResetDate` to the model; handle `ToggleResetDisplay`; a minute timer while the panel is visible.
 
-- [ ] **4. Docs.** `README.md` features line; the panel row description in `docs/MULTI-ACCOUNT-SPEC.md`.
+- [x] **4. Docs.** `README.md` features line; the panel row description in `docs/MULTI-ACCOUNT-SPEC.md`.
 
 - [ ] **5. Review and merge.** Full test suite, code review, fix findings, merge to master. Ask the user before any release or version bump.
 

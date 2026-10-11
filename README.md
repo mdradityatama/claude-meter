@@ -1,6 +1,6 @@
 # Claude Meter
 
-A tiny Windows 11 tray app that keeps your Claude plan usage in sight: the rolling **5-hour** limit and the **7-day** limit, with their reset times, for every Claude Code account you use.
+A tiny Windows 11 tray app that keeps your Claude plan usage in sight: the rolling **5-hour** limit and the **7-day** limit, with the time left until each resets, for every Claude Code account you use.
 
 > Unofficial. Not affiliated with or endorsed by Anthropic.
 
@@ -23,7 +23,7 @@ Claude Meter puts that number on your taskbar, where it's always visible. If you
   | `!` | token expired, no credentials, or an error with no data yet |
   | `—` | not known yet |
 
-- **Every account in one panel.** Hover the icon for a panel that lists each saved account with both limits, progress bars, reset times in your local time, live or last-known status, and how long its login stays valid. The panel follows the Windows light/dark theme and accent color.
+- **Every account in one panel.** Hover the icon for a panel that lists each saved account with both limits, progress bars, the time left until each limit resets (click the bars to show the reset date and time instead), live or last-known status, and how long its login stays valid. The panel follows the Windows light/dark theme and accent color.
 - **Pin it as a widget.** Left or right click the icon to pin the panel: it stays on top while you work in other apps and never takes focus. Click the icon again (or the pin button) to close it.
 - **Switch accounts with one click.** Press **Switch** on any account to make it the one Claude Code uses (see [Multiple accounts](#multiple-accounts)).
 - **Settings in the same panel.** The gear opens saved accounts (with **Remove**), **Keep inactive accounts live**, **Start with Windows**, the claude.ai usage page, and Exit.

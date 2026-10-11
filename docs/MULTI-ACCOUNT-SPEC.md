@@ -62,7 +62,7 @@ Resolve once via a `ClaudePaths` type (replaces `CredentialsLocator`):
 - Global config: `<config-home>\.config.json` if it exists (legacy), else `(%CLAUDE_CONFIG_DIR% or %USERPROFILE%)\.claude.json`.
 - Lock directories (see Locking).
 - App store: `%LOCALAPPDATA%\ClaudeMeter\accounts.dat` (encrypted).
-- App settings: `%LOCALAPPDATA%\ClaudeMeter\settings.json` (not secret: "Keep inactive accounts live"). "Start with Windows" stays in the registry as today.
+- App settings: `%LOCALAPPDATA%\ClaudeMeter\settings.json` (not secret: "Keep inactive accounts live" and the reset view). "Start with Windows" stays in the registry as today.
 
 ## JSON splice
 - One utility locates a property's value span with `Utf8JsonReader` and replaces exactly those bytes.
@@ -190,7 +190,8 @@ Follow the approved mockup. Windows 11 native look, performance first.
 - Header: "Claude Meter", Refresh, Settings (gear), Pin (filled in the accent color when pinned). Opening Settings from a hover panel pins it.
 - While a manual refresh runs, the Refresh button shows an accent progress ring (16 px, indeterminate) and takes no clicks. The ring stays at least 0.6 s, so a click inside every account's manual floor still shows it was received.
 - One uniform row per account, in `AddedAt` order. Nothing reorders and nothing moves on switch; only the Active marker moves.
-- Row: email (ellipsis) + plan badge; right side is either "Active" (accent text, plus a 3×16 px accent pill on the row's left edge and a stronger row fill), a **Switch** button, or "Login expired"; 5h and 7d bars with percentage and local reset time; a status line with live/last-known/switching/error text on the left and login validity on the right.
+- Row: email (ellipsis) + plan badge; right side is either "Active" (accent text, plus a 3×16 px accent pill on the row's left edge and a stronger row fill), a **Switch** button, or "Login expired"; 5h and 7d bars with percentage and reset column; a status line with live/last-known/switching/error text on the left and login validity on the right.
+- Reset column, two views: the time left (default) shows the 2 largest units rounded down ("6d 23h", "4h 12m", "12m", "<1m"); the reset date shows "14:30" if today, else "14 Oct 07:00" in local time (only the month name follows the Windows region format; order and 24-hour time are fixed). A click anywhere on a row's bars switches every row; hover shows a subtle fill over the bars. The choice is saved in `settings.json`. The column has one width for both views, so the bars keep their length. "reset" (inferred) and "—" (unknown) show in both views. While the panel is visible, it updates at the next minute step of the nearest reset.
 
 **Settings view** (same window, back arrow)
 - Accounts: email, plan, login validity, Remove with inline confirmation.
