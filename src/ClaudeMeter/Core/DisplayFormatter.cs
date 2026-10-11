@@ -178,6 +178,35 @@ internal static class DisplayFormatter
         return local.Date == TimeZoneInfo.ConvertTime(now, zone).Date ? time : $"{local.ToString("d MMM", culture)} {time}";
     }
 
+    /// <summary>The longest texts the reset column can show, so the panel sizes it once for both views.</summary>
+    public static IEnumerable<string> ResetColumnSamples(CultureInfo culture)
+    {
+        yield return Countdown(new TimeSpan(6, 23, 0, 0));
+        yield return Countdown(new TimeSpan(23, 59, 0));
+        for (var month = 1; month <= 12; month++)
+            yield return ResetDate(new DateTimeOffset(2026, month, 28, 23, 59, 0, TimeSpan.Zero), TimeZoneInfo.Utc, DateTimeOffset.MinValue, culture);
+    }
+
+    /// <summary>
+    /// Time until a countdown text can next change: the nearest minute step of a reset still ahead. At most a
+    /// minute, which also keeps the date view's "today" current after midnight.
+    /// </summary>
+    public static TimeSpan UntilCountdownChanges(IEnumerable<DateTimeOffset?> resets, DateTimeOffset now)
+    {
+        var wait = TimeSpan.FromMinutes(1);
+        foreach (var reset in resets)
+        {
+            if (reset is { } at && at > now)
+            {
+                var step = TimeSpan.FromTicks((at - now).Ticks % TimeSpan.TicksPerMinute);
+                if (step < wait)
+                    wait = step;
+            }
+        }
+
+        return wait;
+    }
+
     /// <summary>Local time as "HH:mm" if it falls on today, otherwise "ddd HH:mm"; "—" if unknown.</summary>
     public static string FormatTime(DateTimeOffset? value, TimeZoneInfo zone, DateTimeOffset now)
     {

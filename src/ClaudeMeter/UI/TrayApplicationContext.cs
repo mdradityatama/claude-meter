@@ -21,6 +21,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly UsageClient _client = new();
     private readonly ProfileClient _profiles = new();
     private readonly OAuthTokenClient _tokens = new();
+    private readonly AppSettings _settings;
     private readonly AccountsRuntime _runtime;
     private readonly StoreLoadResult _loaded;
     private readonly NotifyIcon _notifyIcon;
@@ -28,6 +29,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly MeterPanel _panel = new();
     // Windows reports no "mouse left the tray icon" event, so hover is tracked by polling the cursor.
     private readonly System.Windows.Forms.Timer _hoverTimer = new() { Interval = 100 };
+    // Runs only while the panel is visible: rebuilds the panel when a countdown's minute changes.
+    private readonly System.Windows.Forms.Timer _countdownTimer = new();
     private readonly ClaudeFilesWatcher _watcher;
     private long _hoverStartedAt;
     private long? _leftAt;
@@ -41,8 +44,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var store = new AccountStore(_paths.Store, new DpapiProtector());
         _loaded = store.Load();
+        _settings = AppSettings.Load(_paths.Settings);
         _runtime = new AccountsRuntime(
-            _paths, store, AppSettings.Load(_paths.Settings), _client, _profiles, _tokens, ClaudeLocks.ForSystem(_paths), TimeProvider.System);
+            _paths, store, _settings, _client, _profiles, _tokens, ClaudeLocks.ForSystem(_paths), TimeProvider.System);
 
         _notifyIcon = new NotifyIcon { Visible = true };
         _notifyIcon.MouseUp += OnNotifyIconMouseUp;
@@ -52,6 +56,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _runtime.Notify += (_, toast) => _notifyIcon.ShowBalloonTip(5000, toast.Title, toast.Body, ToolTipIcon.None);
         _panel.ActionRequested += OnPanelAction;
         _hoverTimer.Tick += OnHoverTick;
+        _countdownTimer.Tick += OnCountdownTick;
+        _panel.VisibleChanged += (_, _) => ScheduleCountdownTick();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -120,7 +126,29 @@ internal sealed class TrayApplicationContext : ApplicationContext
         previous?.Dispose();
 
         if (_panel.Visible)
+        {
             _panel.SetModel(CurrentModel());
+            ScheduleCountdownTick();
+        }
+    }
+
+    private void OnCountdownTick(object? sender, EventArgs e)
+    {
+        _panel.SetModel(CurrentModel());
+        ScheduleCountdownTick();
+    }
+
+    /// <summary>Aims the countdown timer just past the next minute step of any reset; stops it while the panel is hidden.</summary>
+    private void ScheduleCountdownTick()
+    {
+        _countdownTimer.Stop();
+        if (!_panel.Visible)
+            return;
+
+        var resets = _runtime.Accounts.SelectMany(a => new[] { a.Usage.Snapshot?.FiveHour?.ResetsAt, a.Usage.Snapshot?.SevenDay?.ResetsAt });
+        var wait = DisplayFormatter.UntilCountdownChanges(resets, DateTimeOffset.Now) + TimeSpan.FromMilliseconds(50);
+        _countdownTimer.Interval = (int)wait.TotalMilliseconds;
+        _countdownTimer.Start();
     }
 
     private MeterPanelModel CurrentModel()
@@ -135,6 +163,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _refreshing,
             _runtime.KeepInactiveLive,
             StartupRegistration.IsEnabled,
+            _settings.ShowResetDate,
             AppInfo.Version);
     }
 
@@ -256,6 +285,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             case PanelAction.ToggleStartWithWindows:
                 StartupRegistration.SetEnabled(!StartupRegistration.IsEnabled);
                 break;
+            case PanelAction.ToggleResetDisplay:
+                _settings.SetShowResetDate(!_settings.ShowResetDate);
+                break;
             case PanelAction.OpenUsagePage:
                 Process.Start(new ProcessStartInfo(UsagePageUrl) { UseShellExecute = true });
                 break;
@@ -290,6 +322,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _timer.Dispose();
             _hoverTimer.Dispose();
+            _countdownTimer.Dispose();
             _watcher.Dispose();
             _panel.Dispose();
             _notifyIcon.Dispose();

@@ -114,6 +114,14 @@ internal sealed record FluentTheme(
         _ => Text3,
     };
 
+    /// <summary>
+    /// <see cref="SubtleHover"/> or <see cref="SubtlePressed"/> over <paramref name="under"/> instead of the panel
+    /// color, for controls drawn on a row fill.
+    /// </summary>
+    public Color SubtleOver(Color under, bool pressed) => Dark
+        ? Mix(Color.White, pressed ? 0.04 : 0.06, under)
+        : Mix(Color.Black, pressed ? 0.02 : 0.04, under);
+
     /// <summary><paramref name="color"/> at <paramref name="alpha"/> opacity over <paramref name="background"/>.</summary>
     public static Color Mix(Color color, double alpha, Color background) => Color.FromArgb(
         (int)Math.Round(background.R + (color.R - background.R) * alpha),

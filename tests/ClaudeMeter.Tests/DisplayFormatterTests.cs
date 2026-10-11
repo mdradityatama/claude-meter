@@ -101,4 +101,30 @@ public class DisplayFormatterTests
         Assert.Equal("6 Okt 13:00", DisplayFormatter.ResetDate(other, Local, Now, CultureInfo.GetCultureInfo("id-ID")));
         Assert.Equal("6 Oct 13:00", DisplayFormatter.ResetDate(other, Local, Now, CultureInfo.GetCultureInfo("en-US")));
     }
+
+    [Fact]
+    public void Reset_column_samples_cover_both_views_and_every_month()
+    {
+        var samples = DisplayFormatter.ResetColumnSamples(CultureInfo.InvariantCulture).ToList();
+
+        Assert.Contains("6d 23h", samples);
+        Assert.Contains("23h 59m", samples);
+        Assert.Contains("28 Jan 23:59", samples);
+        Assert.Contains("28 Dec 23:59", samples);
+    }
+
+    [Fact]
+    public void Next_countdown_change_is_the_nearest_minute_step_of_a_reset_ahead()
+    {
+        DateTimeOffset?[] resets = [Now.AddHours(4).AddMinutes(12).AddSeconds(30), Now.AddDays(2).AddSeconds(10), null, Now.AddMinutes(-1)];
+
+        Assert.Equal(TimeSpan.FromSeconds(10), DisplayFormatter.UntilCountdownChanges(resets, Now));
+    }
+
+    [Fact]
+    public void Next_countdown_change_is_now_on_a_minute_step_and_a_minute_without_resets()
+    {
+        Assert.Equal(TimeSpan.Zero, DisplayFormatter.UntilCountdownChanges([Now.AddMinutes(5)], Now));
+        Assert.Equal(TimeSpan.FromMinutes(1), DisplayFormatter.UntilCountdownChanges([null, Now.AddSeconds(-30)], Now));
+    }
 }

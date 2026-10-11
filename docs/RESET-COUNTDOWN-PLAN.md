@@ -16,12 +16,12 @@
 |---|---|---|
 | 0. Branch and plan in repo | done | e6f9571 |
 | 1. Core formatting | done | 9865cd6 |
-| 2. Setting | done | (this commit) |
-| 3. UI | pending | |
+| 2. Setting | done | 7abd2b0 |
+| 3. UI | done (manual tray check pending) | (this commit) |
 | 4. Docs | pending | |
 | 5. Review and merge | pending | |
 
-**Next step:** Step 3, the UI.
+**Next step:** Step 4, docs.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -29,6 +29,9 @@
 - 2026-10-11: Work happens on branch `reset-countdown`; merge after the final review.
 - 2026-10-11: Step 1: complete, full suite 262/262. The panel shows the countdown from here on; the click to switch comes in step 3.
 - 2026-10-11: Step 2: complete, full suite 265/265.
+- 2026-10-11: Step 3: Ruling: the countdown timer aims at the next minute step of the nearest reset (`DisplayFormatter.UntilCountdownChanges`, at most a minute) instead of the wall-clock minute, because `resets_at` carries seconds (e.g. `17:20:00.089`) and a wall-clock tick would show a stale minute — cost if wrong: none, at most one extra repaint a minute.
+- 2026-10-11: Step 3: Ruling: the column samples come from `DisplayFormatter.ResetColumnSamples`, so the formats live in one place — cost if wrong: none.
+- 2026-10-11: Step 3: complete, full suite 268/268. Verified by screenshots of the real `MeterPanel` in a scratch harness (dark and light, both views, hover on active and inactive rows, en-ID and de-DE) and simulated clicks (meters toggle, status line does nothing, Switch still switches). Not verified: 125% DPI and a run of the real app, because the user's own instance holds the single-instance mutex.
 
 ---
 
@@ -63,7 +66,7 @@
   - Add `ShowResetDate` (default false = countdown) and `SetShowResetDate(bool)`. One private `Save()` writes both values.
   - Tests: default is countdown; save and reload; saving one setting keeps the other.
 
-- [ ] **3. UI**
+- [x] **3. UI**
   - `MeterPanel.cs`: `MeterPanelModel.ShowResetDate`, `PanelAction.ToggleResetDisplay`, `HitKind.ResetDisplay`; a hit area with hover / pressed fill over both meter lines of a row; `BarRow` writes the countdown or the date in the fixed-width column (cached, cleared on DPI change).
   - `FluentTheme.cs`: blend the hover / pressed tint onto a given color.
   - `TrayApplicationContext.cs`: keep `AppSettings` in a field; pass `CultureInfo.CurrentCulture` and `ShowResetDate` to the model; handle `ToggleResetDisplay`; a minute timer while the panel is visible.

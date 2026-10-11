@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using ClaudeMeter.Core;
 
 namespace ClaudeMeter.UI;
@@ -10,6 +11,7 @@ internal sealed record MeterPanelModel(
     bool Refreshing,
     bool KeepInactiveLive,
     bool StartWithWindows,
+    bool ShowResetDate,
     string Version);
 
 internal abstract record PanelAction
@@ -24,14 +26,16 @@ internal abstract record PanelAction
     public sealed record Remove(AccountKey Key) : PanelAction;
     public sealed record ToggleKeepLive : PanelAction;
     public sealed record ToggleStartWithWindows : PanelAction;
+    /// <summary>Switches every meter between the time left and the reset date.</summary>
+    public sealed record ToggleResetDisplay : PanelAction;
     public sealed record OpenUsagePage : PanelAction;
     public sealed record Exit : PanelAction;
 }
 
 /// <summary>
 /// The tray flyout: every account with usage bars, plus a settings view. One window, fully owner-drawn in a
-/// single pass with its own hit-testing; it never takes focus. Repaints only on data, theme, DPI or hover changes,
-/// plus the refresh button's progress ring while a refresh runs.
+/// single pass with its own hit-testing; it never takes focus. Repaints only on data (including the tray's update
+/// when a countdown ticks), theme, DPI or hover changes, plus the refresh button's progress ring while a refresh runs.
 /// </summary>
 internal sealed class MeterPanel : Form
 {
@@ -74,6 +78,8 @@ internal sealed class MeterPanel : Form
     private int _contentHeight;
     private Rectangle _refreshButton;
     private long _spinStartedAt;
+    // One width for both views, so the meters keep their length on a switch; 0 until measured for the current DPI.
+    private int _resetColumnWidth;
 
     public MeterPanel()
     {
@@ -157,6 +163,7 @@ internal sealed class MeterPanel : Form
         _fonts.Dispose();
         _fonts = new PanelFonts(DeviceDpi / 96f);
         _measured.Clear();
+        _resetColumnWidth = 0;
         Relayout();
     }
 
@@ -251,6 +258,9 @@ internal sealed class MeterPanel : Form
                 break;
             case HitKind.Startup:
                 Raise(new PanelAction.ToggleStartWithWindows());
+                break;
+            case HitKind.ResetDisplay:
+                Raise(new PanelAction.ToggleResetDisplay());
                 break;
             case HitKind.UsagePage:
                 Raise(new PanelAction.OpenUsagePage());
@@ -440,6 +450,12 @@ internal sealed class MeterPanel : Form
         }
 
         var gridTop = line.Bottom + Scale(6);
+        // A click anywhere on the meters switches every meter between the time left and the reset date.
+        var meters = new Rectangle(x + Scale(8), gridTop - Scale(3), w - Scale(16), Scale(38 + 6));
+        var metersHit = new Hit(HitKind.ResetDisplay, row.Key);
+        AddHit(meters, metersHit);
+        if (g is not null && _hover == metersHit)
+            FillRound(g, _theme.SubtleOver(row.IsActive ? _theme.RowActive : _theme.RowFill, _pressed == metersHit), meters, Scale(4));
         BarRow(g, row.FiveHour, left, gridTop, right - left);
         BarRow(g, row.SevenDay, left, gridTop + Scale(22), right - left);
 
@@ -477,7 +493,8 @@ internal sealed class MeterPanel : Form
     {
         var row = Scale(16);
         var label = new Rectangle(x, y, Scale(20), row);
-        var resets = new Rectangle(x + w - Scale(64), y, Scale(64), row);
+        var resetWidth = ResetColumnWidth();
+        var resets = new Rectangle(x + w - resetWidth, y, resetWidth, row);
         var percent = new Rectangle(resets.X - Scale(8 + 36), y, Scale(36), row);
         var track = new Rectangle(label.Right + Scale(8), y + (row - Scale(4)) / 2, percent.X - Scale(8) - label.Right - Scale(8), Scale(4));
 
@@ -490,7 +507,14 @@ internal sealed class MeterPanel : Form
         }
 
         Write(g, bar.Percent, _fonts.SmallSemibold, bar.Inferred ? _theme.Text3 : _theme.Text, percent, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
-        Write(g, bar.Countdown, _fonts.Small, _theme.Text3, resets, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+        Write(g, _model?.ShowResetDate == true ? bar.ResetDate : bar.Countdown, _fonts.Small, _theme.Text3, resets, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+    }
+
+    private int ResetColumnWidth()
+    {
+        if (_resetColumnWidth == 0)
+            _resetColumnWidth = DisplayFormatter.ResetColumnSamples(CultureInfo.CurrentCulture).Max(text => Measure(text, _fonts.Small).Width);
+        return _resetColumnWidth;
     }
 
     private int SettingsBody(Graphics? g, int top, int width)
@@ -749,6 +773,7 @@ internal sealed class MeterPanel : Form
         Startup,
         UsagePage,
         Exit,
+        ResetDisplay,
     }
 
     private readonly record struct Hit(HitKind Kind, AccountKey? Key = null);
