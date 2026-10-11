@@ -7,6 +7,7 @@ internal sealed record MeterPanelModel(
     IReadOnlyList<AccountRowModel> Rows,
     IReadOnlyList<SettingsRowModel> SettingsRows,
     bool Pinned,
+    bool Refreshing,
     bool KeepInactiveLive,
     bool StartWithWindows,
     string Version);
@@ -29,7 +30,8 @@ internal abstract record PanelAction
 
 /// <summary>
 /// The tray flyout: every account with usage bars, plus a settings view. One window, fully owner-drawn in a
-/// single pass with its own hit-testing; it never takes focus. Repaints only on data, theme, DPI or hover changes.
+/// single pass with its own hit-testing; it never takes focus. Repaints only on data, theme, DPI or hover changes,
+/// plus the refresh button's progress ring while a refresh runs.
 /// </summary>
 internal sealed class MeterPanel : Form
 {
@@ -58,6 +60,8 @@ internal sealed class MeterPanel : Form
     private readonly Dictionary<(string, Font), Size> _measured = [];
     private readonly Dictionary<Color, SolidBrush> _brushes = [];
     private readonly Dictionary<Color, Pen> _pens = [];
+    // Runs only while a refresh is in progress and the ring is on screen; each tick repaints the ring alone.
+    private readonly System.Windows.Forms.Timer _spinTimer = new() { Interval = 16 };
     private FluentTheme _theme = SystemTheme.Current;
     private PanelFonts _fonts;
     private MeterPanelModel? _model;
@@ -68,6 +72,8 @@ internal sealed class MeterPanel : Form
     private Hit _pressed;
     private int _scroll;
     private int _contentHeight;
+    private Rectangle _refreshButton;
+    private long _spinStartedAt;
 
     public MeterPanel()
     {
@@ -78,6 +84,7 @@ internal sealed class MeterPanel : Form
         DoubleBuffered = true;
         BackColor = _theme.Background;
         _fonts = new PanelFonts(DeviceDpi / 96f);
+        _spinTimer.Tick += (_, _) => Invalidate(_refreshButton);
     }
 
     public event EventHandler<PanelAction>? ActionRequested;
@@ -136,6 +143,12 @@ internal sealed class MeterPanel : Form
     {
         base.OnHandleCreated(e);
         ApplyWindowAttributes();
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        UpdateSpinTimer();
     }
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
@@ -287,7 +300,25 @@ internal sealed class MeterPanel : Form
             Size = new Size(Scale(LogicalWidth), height);
         }
 
+        UpdateSpinTimer();
         Invalidate();
+    }
+
+    private bool ShowsSpinner => Visible && !_settings && _model?.Refreshing == true;
+
+    private void UpdateSpinTimer()
+    {
+        if (ShowsSpinner == _spinTimer.Enabled)
+            return;
+        if (ShowsSpinner)
+        {
+            _spinStartedAt = Environment.TickCount64;
+            _spinTimer.Start();
+        }
+        else
+        {
+            _spinTimer.Stop();
+        }
     }
 
     /// <summary>
@@ -334,8 +365,13 @@ internal sealed class MeterPanel : Form
         var settings = pin with { X = pin.X - Scale(2) - button };
         var refresh = settings with { X = settings.X - Scale(2) - button };
         var pinned = _model?.Pinned == true;
+        _refreshButton = refresh;
         Write(g, "Claude Meter", _fonts.Title, _theme.Text, new Rectangle(Scale(16), top, refresh.X - Scale(16), button), TextFormatFlags.VerticalCenter);
-        IconButton(g, refresh, GlyphRefresh, new Hit(HitKind.Refresh), _theme.Text2, filled: false);
+        // While refreshing, the button shows a progress ring and takes no clicks.
+        if (_model?.Refreshing == true)
+            ProgressRing(g, refresh);
+        else
+            IconButton(g, refresh, GlyphRefresh, new Hit(HitKind.Refresh), _theme.Text2, filled: false);
         IconButton(g, settings, GlyphSettings, new Hit(HitKind.Settings), _theme.Text2, filled: false);
         IconButton(g, pin, pinned ? GlyphPinned : GlyphPin, new Hit(HitKind.Pin), pinned ? _theme.Accent : _theme.Text2, filled: pinned);
     }
@@ -582,6 +618,21 @@ internal sealed class MeterPanel : Form
         Write(g, glyph, _fonts.Icon16, color, bounds, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
+    /// <summary>Indeterminate Fluent progress ring: a 16 px accent arc that turns once a second while it grows and shrinks.</summary>
+    private void ProgressRing(Graphics? g, Rectangle bounds)
+    {
+        if (g is null)
+            return;
+        var stroke = Scale(2);
+        var size = Scale(16) - stroke;
+        var ring = new Rectangle(bounds.X + (bounds.Width - size) / 2, bounds.Y + (bounds.Height - size) / 2, size, size);
+        var seconds = (Environment.TickCount64 - _spinStartedAt) / 1000.0;
+        var start = (float)(seconds * 360 % 360) - 90;
+        var sweep = (float)(40 + 220 * (0.5 - 0.5 * Math.Cos(seconds * Math.PI)));
+        using var pen = new Pen(_theme.Accent, stroke) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawArc(pen, ring, start, sweep);
+    }
+
     private void Button(Graphics? g, Rectangle bounds, string text, Hit hit, bool enabled, Color textColor, Font font)
     {
         if (enabled)
@@ -675,6 +726,7 @@ internal sealed class MeterPanel : Form
     {
         if (disposing)
         {
+            _spinTimer.Dispose();
             _fonts.Dispose();
             ClearPaintCache();
         }

@@ -188,6 +188,7 @@ Follow the approved mockup. Windows 11 native look, performance first.
 
 **Main view**
 - Header: "Claude Meter", Refresh, Settings (gear), Pin (filled in the accent color when pinned). Opening Settings from a hover panel pins it.
+- While a manual refresh runs, the Refresh button shows an accent progress ring (16 px, indeterminate) and takes no clicks. The ring stays at least 0.6 s, so a click inside every account's manual floor still shows it was received.
 - One uniform row per account, in `AddedAt` order. Nothing reorders and nothing moves on switch; only the Active marker moves.
 - Row: email (ellipsis) + plan badge; right side is either "Active" (accent text, plus a 3×16 px accent pill on the row's left edge and a stronger row fill), a **Switch** button, or "Login expired"; 5h and 7d bars with percentage and local reset time; a status line with live/last-known/switching/error text on the left and login validity on the right.
 
@@ -227,7 +228,7 @@ Bar thresholds stay as today: under 50 OK, 50–79 caution, 80 and above critica
 
 **Performance**
 - One window, fully owner-drawn in a single paint pass; no child controls (the `LinkLabel`s go away). Own hit-testing for buttons.
-- Repaint only on data change or when the hovered/pressed control changes.
+- Repaint only on data change or when the hovered/pressed control changes. Exception: the refresh progress ring repaints its own button (16 ms timer) while a refresh runs and the ring is on screen.
 - Fonts, brushes and measurements cached per DPI and theme.
 - No open/close animation in v1.
 - Keyboard navigation is out of scope (the panel never takes focus).

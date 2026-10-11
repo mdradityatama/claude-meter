@@ -13,6 +13,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private const string UsagePageUrl = "https://claude.ai/settings/usage";
     private const int HoverShowDelayMs = 300;
     private const int HoverHideDelayMs = 400;
+    // A refresh inside every account's manual floor sends nothing and returns at once; the ring still shows this long.
+    private const int MinRefreshFeedbackMs = 600;
 
     private readonly ClaudePaths _paths = ClaudePaths.ForCurrentUser();
     private readonly UsageClient _client = new();
@@ -31,6 +33,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private Point _lastHoverPoint;
     private Icon? _icon;
     private bool _pinned;
+    private bool _refreshing;
     private bool _started;
 
     public TrayApplicationContext()
@@ -128,6 +131,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             [.. accounts.Select(a => DisplayFormatter.AccountRow(a, zone, now))],
             [.. accounts.Where(a => a.IsSaved).Select(a => DisplayFormatter.SettingsRow(a, zone, now))],
             _pinned,
+            _refreshing,
             _runtime.KeepInactiveLive,
             StartupRegistration.IsEnabled,
             AppInfo.Version);
@@ -221,7 +225,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         switch (action)
         {
             case PanelAction.Refresh:
+                _refreshing = true;
+                _panel.SetModel(CurrentModel());
+                var minimumFeedback = Task.Delay(MinRefreshFeedbackMs);
                 await RunSafelyAsync(() => _runtime.PollAsync(manual: true, CancellationToken.None));
+                await minimumFeedback;
+                _refreshing = false;
                 ScheduleNextPoll();
                 break;
             case PanelAction.TogglePin:
