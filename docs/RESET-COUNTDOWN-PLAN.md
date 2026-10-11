@@ -15,19 +15,20 @@
 | Step | Status | Commit |
 |---|---|---|
 | 0. Branch and plan in repo | done | e6f9571 |
-| 1. Core formatting | done | (this commit) |
-| 2. Setting | pending | |
+| 1. Core formatting | done | 9865cd6 |
+| 2. Setting | done | (this commit) |
 | 3. UI | pending | |
 | 4. Docs | pending | |
 | 5. Review and merge | pending | |
 
-**Next step:** Step 2, the setting (test first).
+**Next step:** Step 3, the UI.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
 - 2026-10-11: Plan approved after a grilling session; the agreed decisions are below.
 - 2026-10-11: Work happens on branch `reset-countdown`; merge after the final review.
 - 2026-10-11: Step 1: complete, full suite 262/262. The panel shows the countdown from here on; the click to switch comes in step 3.
+- 2026-10-11: Step 2: complete, full suite 265/265.
 
 ---
 
@@ -58,7 +59,7 @@
   - `AccountRow(view, zone, now)` gains `CultureInfo culture`. `FormatTime` stays for the status line.
   - Tests: `Countdown` theory (0 s, 59 s, 60 s, 59 m 59 s, 1 h, 4 h 12 m 40 s, 23 h 59 m, 24 h, 6 d 23 h 59 m); `ResetDate` for today, another day in InvariantCulture and id-ID, and null. Update the `BarModel` expectations in `AccountRowTests.cs`.
 
-- [ ] **2. Setting** — `src/ClaudeMeter/Core/AppSettings.cs`
+- [x] **2. Setting** — `src/ClaudeMeter/Core/AppSettings.cs`
   - Add `ShowResetDate` (default false = countdown) and `SetShowResetDate(bool)`. One private `Save()` writes both values.
   - Tests: default is countdown; save and reload; saving one setting keeps the other.
 

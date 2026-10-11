@@ -31,6 +31,31 @@ public class AppSettingsTests : IDisposable
         Assert.True(AppSettings.Load(Path).SetKeepInactiveLive(false));
 
         Assert.False(AppSettings.Load(Path).KeepInactiveLive);
-        Assert.Equal("""{"keepInactiveLive":false}""", File.ReadAllText(Path));
+        Assert.Equal("""{"keepInactiveLive":false,"showResetDate":false}""", File.ReadAllText(Path));
+    }
+
+    [Fact]
+    public void Missing_file_shows_the_countdown()
+    {
+        Assert.False(AppSettings.Load(Path).ShowResetDate);
+    }
+
+    [Fact]
+    public void Reset_view_is_saved_and_reloaded()
+    {
+        Assert.True(AppSettings.Load(Path).SetShowResetDate(true));
+
+        Assert.True(AppSettings.Load(Path).ShowResetDate);
+    }
+
+    [Fact]
+    public void Saving_one_setting_keeps_the_other()
+    {
+        AppSettings.Load(Path).SetKeepInactiveLive(false);
+        AppSettings.Load(Path).SetShowResetDate(true);
+
+        var settings = AppSettings.Load(Path);
+        Assert.False(settings.KeepInactiveLive);
+        Assert.True(settings.ShowResetDate);
     }
 }
