@@ -80,6 +80,8 @@ internal sealed class MeterPanel : Form
     private long _spinStartedAt;
     // One width for both views, so the meters keep their length on a switch; 0 until measured for the current DPI.
     private int _resetColumnWidth;
+    // The culture the width was measured for; the rows take their month names from the current culture too.
+    private CultureInfo? _resetColumnCulture;
 
     public MeterPanel()
     {
@@ -512,8 +514,13 @@ internal sealed class MeterPanel : Form
 
     private int ResetColumnWidth()
     {
-        if (_resetColumnWidth == 0)
-            _resetColumnWidth = DisplayFormatter.ResetColumnSamples(CultureInfo.CurrentCulture).Max(text => Measure(text, _fonts.Small).Width);
+        var culture = CultureInfo.CurrentCulture;
+        if (_resetColumnWidth == 0 || !ReferenceEquals(culture, _resetColumnCulture))
+        {
+            _resetColumnWidth = DisplayFormatter.ResetColumnSamples(culture).Max(text => Measure(text, _fonts.Small).Width);
+            _resetColumnCulture = culture;
+        }
+
         return _resetColumnWidth;
     }
 
