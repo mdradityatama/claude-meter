@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClaudeMeter.Core;
 
 namespace ClaudeMeter.Tests;
@@ -67,5 +68,37 @@ public class DisplayFormatterTests
         Assert.Equal("14:30", DisplayFormatter.FormatTime(new DateTimeOffset(2026, 9, 29, 7, 30, 0, TimeSpan.Zero), Local, Now));
         Assert.Equal("Wed 07:00", DisplayFormatter.FormatTime(new DateTimeOffset(2026, 9, 30, 0, 0, 0, TimeSpan.Zero), Local, Now));
         Assert.Equal("—", DisplayFormatter.FormatTime(null, Local, Now));
+    }
+
+    [Theory]
+    [InlineData(0, "<1m")]
+    [InlineData(59, "<1m")]
+    [InlineData(60, "1m")]
+    [InlineData(59 * 60 + 59, "59m")]
+    [InlineData(3600, "1h 0m")]
+    [InlineData(4 * 3600 + 12 * 60 + 40, "4h 12m")]
+    [InlineData(23 * 3600 + 59 * 60, "23h 59m")]
+    [InlineData(24 * 3600, "1d 0h")]
+    [InlineData(6 * 86400 + 23 * 3600 + 59 * 60, "6d 23h")]
+    public void Countdown_shows_the_two_largest_units_rounded_down(int seconds, string expected)
+    {
+        Assert.Equal(expected, DisplayFormatter.Countdown(TimeSpan.FromSeconds(seconds)));
+    }
+
+    [Fact]
+    public void Reset_date_is_local_time_only_today_and_day_month_otherwise()
+    {
+        var other = new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero);
+        Assert.Equal("14:30", DisplayFormatter.ResetDate(new DateTimeOffset(2026, 9, 29, 7, 30, 0, TimeSpan.Zero), Local, Now, CultureInfo.InvariantCulture));
+        Assert.Equal("6 Oct 07:00", DisplayFormatter.ResetDate(other, Local, Now, CultureInfo.InvariantCulture));
+        Assert.Equal("—", DisplayFormatter.ResetDate(null, Local, Now, CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void Reset_date_month_follows_the_culture_but_time_stays_24_hour()
+    {
+        var other = new DateTimeOffset(2026, 10, 6, 6, 0, 0, TimeSpan.Zero);
+        Assert.Equal("6 Okt 13:00", DisplayFormatter.ResetDate(other, Local, Now, CultureInfo.GetCultureInfo("id-ID")));
+        Assert.Equal("6 Oct 13:00", DisplayFormatter.ResetDate(other, Local, Now, CultureInfo.GetCultureInfo("en-US")));
     }
 }

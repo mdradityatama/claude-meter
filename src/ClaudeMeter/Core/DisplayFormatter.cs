@@ -26,8 +26,9 @@ internal enum RowAction
     LoginExpired,
 }
 
+/// <param name="Countdown">Time left until the reset; the panel shows this or <paramref name="ResetDate"/>.</param>
 /// <param name="Inferred">The window reset after the data was fetched: shown as ≈0%.</param>
-internal sealed record BarModel(string Label, string Percent, string Resets, double Fraction, UsageLevel Level, bool Inferred);
+internal sealed record BarModel(string Label, string Percent, string Countdown, string ResetDate, double Fraction, UsageLevel Level, bool Inferred);
 
 internal sealed record AccountRowModel(
     AccountKey Key, string Email, string? Plan, bool IsActive, RowAction Action,
@@ -60,7 +61,8 @@ internal static class DisplayFormatter
             : new IconFace(percent.ToString(CultureInfo.InvariantCulture), LevelFor(percent));
     }
 
-    public static AccountRowModel AccountRow(AccountView view, TimeZoneInfo zone, DateTimeOffset now)
+    /// <param name="culture">Gives the month names of reset dates.</param>
+    public static AccountRowModel AccountRow(AccountView view, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture)
     {
         var usage = view.Usage;
         var action = view.Switching is not null ? RowAction.Switching
@@ -79,8 +81,8 @@ internal static class DisplayFormatter
 
         return new AccountRowModel(
             view.Key, view.Email, PlanBadge(view.Plan), view.IsActive, action,
-            Bar("5h", usage.Snapshot?.FiveHour, usage.LastUpdated, zone, now),
-            Bar("7d", usage.Snapshot?.SevenDay, usage.LastUpdated, zone, now),
+            Bar("5h", usage.Snapshot?.FiveHour, usage.LastUpdated, zone, now, culture),
+            Bar("7d", usage.Snapshot?.SevenDay, usage.LastUpdated, zone, now, culture),
             status, tone,
             view.Login.Expired ? "" : view.Login.Text, view.Login.Tone);
     }
@@ -139,17 +141,41 @@ internal static class DisplayFormatter
         error is "network error" or "timeout" ? "Offline" : Capitalize(error ?? "error");
 
     /// <summary>A reset that passed after the data was fetched is shown as ≈0% with "reset".</summary>
-    private static BarModel Bar(string label, UsageWindow? window, DateTimeOffset? fetchedAt, TimeZoneInfo zone, DateTimeOffset now)
+    private static BarModel Bar(string label, UsageWindow? window, DateTimeOffset? fetchedAt, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture)
     {
         if (window?.ResetsAt is { } resetsAt && resetsAt <= now && (fetchedAt is null || fetchedAt < resetsAt))
-            return new BarModel(label, "≈0%", "reset", 0, UsageLevel.Green, Inferred: true);
+            return new BarModel(label, "≈0%", "reset", "reset", 0, UsageLevel.Green, Inferred: true);
 
-        var resets = FormatTime(window?.ResetsAt, zone, now);
+        var countdown = window?.ResetsAt is { } at ? Countdown(at - now) : Unknown;
+        var date = ResetDate(window?.ResetsAt, zone, now, culture);
         if (Round(window?.Utilization) is not int percent)
-            return new BarModel(label, Unknown, resets, 0, UsageLevel.Unknown, false);
+            return new BarModel(label, Unknown, countdown, date, 0, UsageLevel.Unknown, false);
 
         var level = percent >= 100 ? UsageLevel.Red : LevelFor(percent);
-        return new BarModel(label, $"{percent}%", resets, Math.Clamp(window!.Utilization!.Value / 100, 0, 1), level, false);
+        return new BarModel(label, $"{percent}%", countdown, date, Math.Clamp(window!.Utilization!.Value / 100, 0, 1), level, false);
+    }
+
+    /// <summary>The two largest units, rounded down: "6d 23h", "4h 12m", "12m", or "&lt;1m".</summary>
+    public static string Countdown(TimeSpan left) => left switch
+    {
+        _ when left < TimeSpan.FromMinutes(1) => "<1m",
+        _ when left < TimeSpan.FromHours(1) => $"{left.Minutes}m",
+        _ when left < TimeSpan.FromDays(1) => $"{left.Hours}h {left.Minutes}m",
+        _ => $"{left.Days}d {left.Hours}h",
+    };
+
+    /// <summary>
+    /// Local time as "HH:mm" if it falls on today, otherwise "d MMM HH:mm"; "—" if unknown. Only the month name
+    /// follows <paramref name="culture"/>, so the order and the 24-hour time stay the same everywhere.
+    /// </summary>
+    public static string ResetDate(DateTimeOffset? value, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture)
+    {
+        if (value is not { } at)
+            return Unknown;
+
+        var local = TimeZoneInfo.ConvertTime(at, zone);
+        var time = local.ToString("HH:mm", CultureInfo.InvariantCulture);
+        return local.Date == TimeZoneInfo.ConvertTime(now, zone).Date ? time : $"{local.ToString("d MMM", culture)} {time}";
     }
 
     /// <summary>Local time as "HH:mm" if it falls on today, otherwise "ddd HH:mm"; "—" if unknown.</summary>

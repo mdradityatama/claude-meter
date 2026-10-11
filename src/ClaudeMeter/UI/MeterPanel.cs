@@ -490,7 +490,7 @@ internal sealed class MeterPanel : Form
         }
 
         Write(g, bar.Percent, _fonts.SmallSemibold, bar.Inferred ? _theme.Text3 : _theme.Text, percent, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
-        Write(g, bar.Resets, _fonts.Small, _theme.Text3, resets, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+        Write(g, bar.Countdown, _fonts.Small, _theme.Text3, resets, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
     }
 
     private int SettingsBody(Graphics? g, int top, int width)

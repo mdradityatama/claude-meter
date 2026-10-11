@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClaudeMeter.Core;
 
 namespace ClaudeMeter.Tests;
@@ -20,7 +21,7 @@ public class AccountRowTests
         new(Key, "a@example.com", plan, active, saved, usage ?? new UsageState(UsageStatus.Ok, Snapshot, Now, null),
             login ?? Valid, switching, switchedHere, warning, loginExpiresAt);
 
-    private static AccountRowModel Row(AccountView view) => DisplayFormatter.AccountRow(view, Local, Now);
+    private static AccountRowModel Row(AccountView view) => DisplayFormatter.AccountRow(view, Local, Now, CultureInfo.InvariantCulture);
 
     [Fact]
     public void Active_live_row()
@@ -29,8 +30,8 @@ public class AccountRowTests
 
         Assert.Equal(RowAction.Active, row.Action);
         Assert.Equal(("Live · updated 09:00", Tone.Muted), (row.Status, row.StatusTone));
-        Assert.Equal(new BarModel("5h", "42%", "14:30", 0.42, UsageLevel.Green, false), row.FiveHour);
-        Assert.Equal(new BarModel("7d", "82%", "Tue 07:00", 0.816, UsageLevel.Red, false), row.SevenDay);
+        Assert.Equal(new BarModel("5h", "42%", "5h 30m", "14:30", 0.42, UsageLevel.Green, false), row.FiveHour);
+        Assert.Equal(new BarModel("7d", "82%", "6d 22h", "6 Oct 07:00", 0.816, UsageLevel.Red, false), row.SevenDay);
         Assert.Equal(("Login valid 13 days", Tone.Muted), (row.Login, row.LoginTone));
         Assert.Equal("Pro", row.Plan);
     }
@@ -64,7 +65,7 @@ public class AccountRowTests
         UsageState FetchedAt(DateTimeOffset fetched, DateTimeOffset resetsAt) =>
             new(UsageStatus.Ok, new UsageSnapshot(new UsageWindow(42, resetsAt), null), fetched, null);
 
-        Assert.Equal(new BarModel("5h", "≈0%", "reset", 0, UsageLevel.Green, true), Row(View(FetchedAt(Now.AddMinutes(-9), Now))).FiveHour);
+        Assert.Equal(new BarModel("5h", "≈0%", "reset", "reset", 0, UsageLevel.Green, true), Row(View(FetchedAt(Now.AddMinutes(-9), Now))).FiveHour);
         Assert.False(Row(View(FetchedAt(Now.AddMinutes(-9), Now.AddSeconds(1)))).FiveHour.Inferred);
         Assert.False(Row(View(FetchedAt(Now, Now))).FiveHour.Inferred);
     }
@@ -74,13 +75,13 @@ public class AccountRowTests
     {
         var usage = new UsageState(UsageStatus.Ok, new UsageSnapshot(new UsageWindow(130, null), null), Now, null);
 
-        Assert.Equal(new BarModel("5h", "130%", "—", 1, UsageLevel.Red, false), Row(View(usage)).FiveHour);
+        Assert.Equal(new BarModel("5h", "130%", "—", "—", 1, UsageLevel.Red, false), Row(View(usage)).FiveHour);
     }
 
     [Fact]
     public void Unknown_usage_shows_dashes()
     {
-        Assert.Equal(new BarModel("7d", "—", "—", 0, UsageLevel.Unknown, false), Row(View(UsageState.Initial)).SevenDay);
+        Assert.Equal(new BarModel("7d", "—", "—", "—", 0, UsageLevel.Unknown, false), Row(View(UsageState.Initial)).SevenDay);
     }
 
     [Fact]

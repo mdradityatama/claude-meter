@@ -14,19 +14,20 @@
 
 | Step | Status | Commit |
 |---|---|---|
-| 0. Branch and plan in repo | done | (this commit) |
-| 1. Core formatting | pending | |
+| 0. Branch and plan in repo | done | e6f9571 |
+| 1. Core formatting | done | (this commit) |
 | 2. Setting | pending | |
 | 3. UI | pending | |
 | 4. Docs | pending | |
 | 5. Review and merge | pending | |
 
-**Next step:** Step 1, core formatting (test first).
+**Next step:** Step 2, the setting (test first).
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
 - 2026-10-11: Plan approved after a grilling session; the agreed decisions are below.
 - 2026-10-11: Work happens on branch `reset-countdown`; merge after the final review.
+- 2026-10-11: Step 1: complete, full suite 262/262. The panel shows the countdown from here on; the click to switch comes in step 3.
 
 ---
 
@@ -50,7 +51,7 @@
 
 - [x] **0. Branch and plan in repo.** `git switch -c reset-countdown`; add this file; commit.
 
-- [ ] **1. Core formatting, test first** — `src/ClaudeMeter/Core/DisplayFormatter.cs`
+- [x] **1. Core formatting, test first** — `src/ClaudeMeter/Core/DisplayFormatter.cs`
   - New `Countdown(TimeSpan left)` with the rules above.
   - New `ResetDate(DateTimeOffset? at, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture)`: `"HH:mm"` today; else `"d MMM"` in `culture` plus `" HH:mm"` invariant; "—" if null.
   - `BarModel`: replace `Resets` with `Countdown` and `ResetDate`. Inferred gives "reset" in both, unknown gives "—" in both.

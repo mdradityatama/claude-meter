@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using ClaudeMeter.Core;
 using Microsoft.Win32;
 
@@ -128,7 +129,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var now = DateTimeOffset.Now;
         var accounts = _runtime.Accounts;
         return new MeterPanelModel(
-            [.. accounts.Select(a => DisplayFormatter.AccountRow(a, zone, now))],
+            [.. accounts.Select(a => DisplayFormatter.AccountRow(a, zone, now, CultureInfo.CurrentCulture))],
             [.. accounts.Where(a => a.IsSaved).Select(a => DisplayFormatter.SettingsRow(a, zone, now))],
             _pinned,
             _refreshing,
