@@ -19,9 +19,9 @@
 | 2. Setting | done | 7abd2b0 |
 | 3. UI | done (manual tray check pending) | 605b2d3 |
 | 4. Docs | done | (this commit) |
-| 5. Review and merge | review done, fixes committed; smoke run and merge pending | (this commit) |
+| 5. Review and merge | done; smoke run of the real app not done | b55d213, merge (this commit) |
 
-**Next step:** Step 5, smoke run of the real app (the user closes their running instance), then merge.
+**Next step:** None. The feature is merged to master. Open: the smoke run of the real app with `publish\ClaudeMeter.exe`.
 
 **Decisions and findings during implementation** (append, newest last, one line each with date):
 
@@ -40,6 +40,7 @@
 - 2026-10-11: Step 5: Fixed: `SubtleHover`, `SubtlePressed` and `SubtleOver` share one tint function, so the meter hover cannot drift from the other controls.
 - 2026-10-11: Step 5: Correction to the step 3 ruling: the countdown timer fires once per distinct sub-minute phase of the resets, so up to 2 repaints a minute per account, not 1. Kept: the timer runs only while the panel is visible, and each repaint is cheap.
 - 2026-10-11: Step 5: Kept as is: a past reset that is not inferred shows "<1m" until the next poll (the server has not reset yet, so the reset is imminent); the toggle saves synchronously like the other toggles; the settings view's login date stays invariant (agreed decision: other times do not change); the time strings stay in `BarModel` so Core keeps the formatting testable; the shared `AppSettings` keeps two owners (the runtime needs KeepInactiveLive, only the tray needs ShowResetDate); `ResetDate` and `FormatTime` stay separate; the hover fill keeps 8 px from both card edges.
+- 2026-10-11: Step 5: complete. The user chose to merge without the smoke run. Local publish to `publish\ClaudeMeter.exe` (Release, self-contained), fast-forward merge to master, pushed. No release tag, no version bump.
 
 ---
 
@@ -81,7 +82,7 @@
 
 - [x] **4. Docs.** `README.md` features line; the panel row description in `docs/MULTI-ACCOUNT-SPEC.md`.
 
-- [ ] **5. Review and merge.** Full test suite, code review, fix findings, merge to master. Ask the user before any release or version bump.
+- [x] **5. Review and merge.** Full test suite, code review, fix findings, merge to master. Ask the user before any release or version bump.
 
 ## Verification
 
